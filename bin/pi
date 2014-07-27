@@ -1,0 +1,25 @@
+#!/bin/bash
+
+cd $(git rev-parse --show-toplevel)
+USER=pi
+HOST=hexapod
+TMP=/tmp/bot
+PKG=$1
+shift
+
+echo
+echo "# building"
+GOARCH=arm GOOS=linux go build -v -o $TMP $PKG || exit 1
+
+echo
+echo "# waiting"
+ping -o $HOST >/dev/null
+
+echo
+echo "# deploying"
+rsync -p $TMP $USER@$HOST:$TMP || exit 1
+rm $TMP
+
+echo
+echo "# running"
+ssh -t $USER@$HOST "$TMP --port=/dev/ttyACM0 $@" || exit 1
