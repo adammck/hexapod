@@ -18,12 +18,15 @@ func NewHexapod(network *dynamixel.DynamixelNetwork) *Hexapod {
 	return &Hexapod{
 		Network: network,
 		Legs: [6]*Leg{
-			NewLeg(network, 10, NewPoint(-51.1769, 98.0204, 2), -60),   // Front Left
-			NewLeg(network, 20, NewPoint(51.1769, 98.0204, 2), 60),     // Front Right
-			NewLeg(network, 30, NewPoint(51.1769, 0, 2), 90),           // Mid Right
-			NewLeg(network, 40, NewPoint(51.1769, -98.0204, 2), 120),   // Back Right
-			NewLeg(network, 50, NewPoint(-51.1769, -98.0204, 2), -120), // Back Left
-			NewLeg(network, 60, NewPoint(-51.1769, 0, 2), -90),         // Mid Left
+
+			// Points are the X/Y/Z offsets from the center of the top of the body to
+			// the center of the coxa pivots.
+			NewLeg(network, 10, NewPoint(-51.1769, 98, -40), -60),   // Front Left
+			NewLeg(network, 20, NewPoint(51.1769, 98, -40), 60),     // Front Right
+			NewLeg(network, 30, NewPoint(66, 0, -40), 90),           // Mid Right
+			NewLeg(network, 40, NewPoint(51.1769, -98, -40), 120),   // Back Right
+			NewLeg(network, 50, NewPoint(-51.1769, -98, -40), -120), // Back Left
+			NewLeg(network, 60, NewPoint(-66, 0, -40), -90),         // Mid Left
 		},
 	}
 }
