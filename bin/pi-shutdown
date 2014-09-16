@@ -1,0 +1,4 @@
+#!/bin/bash
+USER=pi
+HOST=hexapod
+ssh -t $USER@$HOST "sudo shutdown -h now" || exit 1

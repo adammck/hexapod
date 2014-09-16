@@ -15,4 +15,8 @@ The hexapod's hostname must be `hexapod`.
 
 To deploy and run an arbitrary package:
 
-    bin/pi utils/xmas.go
+    bin/pi-run utils/xmas.go
+
+To power down:
+
+    bin/pi-shutdown
