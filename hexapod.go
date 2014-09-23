@@ -4,6 +4,8 @@ import (
 	"github.com/adammck/dynamixel"
 	"github.com/jacobsa/go-serial/serial"
 	"time"
+	"math"
+	"fmt"
 )
 
 type Hexapod struct {
@@ -21,12 +23,12 @@ func NewHexapod(network *dynamixel.DynamixelNetwork) *Hexapod {
 
 			// Points are the X/Y/Z offsets from the center of the top of the body to
 			// the center of the coxa pivots.
-			NewLeg(network, 10, NewPoint(-51.1769, 98, -40), -60),   // Front Left
-			NewLeg(network, 20, NewPoint(51.1769, 98, -40), 60),     // Front Right
-			NewLeg(network, 30, NewPoint(66, 0, -40), 90),           // Mid Right
-			NewLeg(network, 40, NewPoint(51.1769, -98, -40), 120),   // Back Right
-			NewLeg(network, 50, NewPoint(-51.1769, -98, -40), -120), // Back Left
-			NewLeg(network, 60, NewPoint(-66, 0, -40), -90),         // Mid Left
+			NewLeg(network, 10, NewPoint(-51.1769, -40,  98), -120), // Front Left  - 0
+			NewLeg(network, 20, NewPoint(51.1769,  -40,  98),  -60), // Front Right - 1
+			NewLeg(network, 30, NewPoint(66,       -40,   0),    0), // Mid Right   - 2
+			NewLeg(network, 40, NewPoint(51.1769,  -40, -98),   60), // Back Right  - 3
+			NewLeg(network, 50, NewPoint(-51.1769, -40, -98),  120), // Back Left   - 4
+			NewLeg(network, 60, NewPoint(-66,      -40,   0),  180), // Mid Left    - 5
 		},
 	}
 }
@@ -85,6 +87,111 @@ func (hexapod *Hexapod) SyncLegs(f func(leg *Leg)) {
 	})
 }
 
+// setMoveSpeed sets the moving speed of all servos. This is only really useful
+// for testing and debugging.
+func (hexapod *Hexapod) setMoveSpeed(speed int) {
+	for _, leg := range hexapod.Legs {
+		for _, servo := range leg.Servos() {
+			servo.SetTorqueEnable(true)
+			servo.SetMovingSpeed(speed)
+		}
+	}
+}
+
+
+// Demo moves the legs around arbitrarily to demonstrate that everything is
+// working as it should.
+func (hexapod *Hexapod) Demo() {
+	hexapod.setMoveSpeed(128)
+
+
+	radius := 260.0
+
+	for y := -120.0; y <= 60; y += 10 {
+		hexapod.Sync(func() {
+			for _, leg := range hexapod.Legs {
+				fmt.Println()
+				fmt.Println()
+				x := math.Cos(rad(leg.Angle)) * radius
+				z := math.Sin(rad(leg.Angle)) * radius
+				leg.SetGoal(x, y, -z)
+			}
+		})
+	}
+
+
+	// l := hexapod.Legs[2]
+
+	// for _, servo := range l.Servos() {
+	// 	servo.SetTorqueEnable(true)
+	// 	servo.SetMovingSpeed(256)
+	// }
+
+	//for x := 200.0; x < 270; x += 1 {
+		//l.SetGoal(x, -60, 0)
+		//time.Sleep(250 * time.Millisecond)
+	//}
+
+	// for _, leg := range hexapod.Legs {
+	// 	for _, servo := range leg.Servos() {
+	// 		servo.SetTorqueEnable(true)
+	// 		servo.SetMovingSpeed(128)
+	// 	}
+	// }
+
+	// d := 2000
+
+	// // Feet down
+	// hexapod.setLegs(0, -60, 85, 60)
+	// wait(d)
+
+	// // Stand
+	// hexapod.setLegs(0, -30, 80, 60)
+	// wait(d)
+
+	// for _, leg := range hexapod.Legs {
+	// 	for _, servo := range leg.Servos() {
+	// 		servo.SetTorqueEnable(true)
+	// 		servo.SetMovingSpeed(500)
+	// 	}
+	// }
+
+	// // Stomp
+	// for i := 0; i < 2; i++ {
+	// 	for _, leg := range hexapod.Legs {
+	// 		hexapod.Sync(func() {
+	// 			leg.Femur.MoveTo(-80)
+	// 			leg.Tibia.MoveTo(90)
+	// 		})
+	// 		wait(250)
+
+	// 		hexapod.Sync(func() {
+	// 			leg.Coxa.MoveTo(0)
+	// 			leg.Femur.MoveTo(-30)
+	// 			leg.Tibia.MoveTo(80)
+	// 		})
+	// 		wait(250)
+	// 	}
+	// }
+
+	// for _, leg := range hexapod.Legs {
+	// 	for _, servo := range leg.Servos() {
+	// 		servo.SetMovingSpeed(128)
+	// 	}
+	// }
+
+	// // Feet back down
+	// hexapod.setLegs(0, -60, 85, 60)
+	// wait(d)
+
+	// // Lay
+	// hexapod.setLegs(0, -60, 0, 0)
+	// wait(1000)
+
+	// hexapod.setLegs(0, 0, 0, 0)
+	// wait(1000)
+}
+
 //
 // Shutdown moves all servos to a hard-coded default position, then turns them
 // off. This should be called when finished
@@ -117,4 +224,13 @@ func (hexapod *Hexapod) Shutdown() {
 
 func wait(ms int) {
 	time.Sleep(time.Duration(ms) * time.Millisecond)
+}
+
+func (hexapod *Hexapod) setLegs(c float64, f float64, t float64, tt float64) {
+	hexapod.SyncLegs(func(leg *Leg) {
+		leg.Coxa.MoveTo(c)
+		leg.Femur.MoveTo(f)
+		leg.Tibia.MoveTo(t)
+		leg.Tarsus.MoveTo(tt)
+	})
 }
