@@ -106,7 +106,7 @@ func (hexapod *Hexapod) Demo() {
 
 	radius := 220.0
 	step := -5.0
-	min := -230.0
+	min := -220.0
 	max := 30.0
 	y := max
 
@@ -116,7 +116,7 @@ func (hexapod *Hexapod) Demo() {
 			for _, leg := range hexapod.Legs {
 				x := math.Cos(rad(leg.Angle)) * radius
 				z := math.Sin(rad(leg.Angle)) * radius
-				leg.SetGoal(x, y, -z)
+				leg.SetGoal(Point3d{x, y, -z})
 			}
 
 			//time.Sleep(200 * time.Millisecond)
@@ -132,6 +132,89 @@ func (hexapod *Hexapod) Demo() {
 		}
 	}
 }
+
+// Rotate just rotates the hexapod in a counter-clockwise circle forever.
+func (hexapod *Hexapod) Rotate() {
+	hexapod.setMoveSpeed(256)
+
+	// settings
+	radius := 220.0
+	footDown := -100.0
+	footUp := -80.0
+	sleep := 100 * time.Millisecond
+
+	// tmp
+	currentDeg := 0.0
+	targetDeg := 15.0
+
+	// set all legs to their default position
+	hexapod.Sync(func() {
+		for _, leg := range hexapod.Legs {
+			x := math.Cos(rad(currentDeg + leg.Angle)) * radius
+			z := math.Sin(rad(currentDeg + leg.Angle)) * radius
+			leg.SetGoal(Point3d{x, footDown, -z})
+		}
+	})
+
+	time.Sleep(sleep * 2)
+
+	for {
+		degOffset := targetDeg - currentDeg
+
+		for _, leg := range hexapod.Legs {
+
+			// calculate current foot targets
+			cX := math.Cos(rad(leg.Angle)) * radius
+			cZ := math.Sin(rad(leg.Angle)) * radius
+
+			// calculate eventual foot targets
+			tX := math.Cos(rad(leg.Angle - degOffset)) * radius
+			tZ := math.Sin(rad(leg.Angle - degOffset)) * radius
+
+			// do nothing if the leg is already at it's target position
+			if cX == tX && cZ == tZ {
+				break
+			}
+
+			// raise the foot
+			hexapod.Sync(func() {
+				leg.SetGoal(Point3d{cX, footUp, -cZ})
+			})
+
+			time.Sleep(sleep)
+
+			// move to the target position, still raised
+			hexapod.Sync(func() {
+				leg.SetGoal(Point3d{tX, footUp, -tZ})
+			})
+
+			time.Sleep(sleep)
+
+			// lower the foot
+			hexapod.Sync(func() {
+				leg.SetGoal(Point3d{tX, footDown, -tZ})
+			})
+
+			time.Sleep(sleep)
+		}
+
+		// update position
+		currentDeg += 10
+		targetDeg += 10
+
+		// twist back to straight
+		hexapod.Sync(func() {
+			for _, leg := range hexapod.Legs {
+				x := math.Cos(rad(leg.Angle)) * radius
+				z := math.Sin(rad(leg.Angle)) * radius
+				leg.SetGoal(Point3d{x, footDown, -z})
+			}
+		})
+
+		time.Sleep(sleep)
+	}
+}
+
 
 //
 // Shutdown moves all servos to a hard-coded default position, then turns them

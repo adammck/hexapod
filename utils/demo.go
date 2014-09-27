@@ -22,7 +22,8 @@ func main() {
   }
 
   h.Network.Debug = *debug
-  h.Demo()
+  //h.Demo()
+  h.Rotate()
 
   fmt.Println("Done.")
 }

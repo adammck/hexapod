@@ -51,9 +51,7 @@ func _sss(a float64, b float64, c float64) float64 {
 	return deg(math.Acos(((b*b) + (c*c) - (a*a)) / (2 * b * c)))
 }
 
-// Sets the goal position of this leg to the given x/y/z coordinates, relative
-// to the center of the hexapod.
-func (leg *Leg) SetGoal(x float64, y float64, z float64) {
+func (leg *Leg) segments() (*ik.Segment, *ik.Segment, *ik.Segment, *ik.Segment) {
 
 	// The position of the object in space must be specified by two segments. The
 	// first positions it, then the second (which is always zero-length) rotates
@@ -66,9 +64,17 @@ func (leg *Leg) SetGoal(x float64, y float64, z float64) {
 	femur  := ik.MakeSegment("femur",  coxa,  *ik.MakePair(ik.RotationBank,    90,    0), *ik.MakeVector3(100, 0,  0))
 	tibia  := ik.MakeSegment("tibia",  femur, *ik.MakePair(ik.RotationBank,     0, -135), *ik.MakeVector3(85,  0,  0))
 	tarsus := ik.MakeSegment("tarsus", tibia, *ik.MakePair(ik.RotationBank,    90,  -90), *ik.MakeVector3(64,  0,  0))
-	_ = tarsus
 
-	v := &ik.Vector3{x, y, z}
+	// Return just the useful segments
+	return coxa, femur, tibia, tarsus
+}
+
+// Sets the goal position of this leg to the given x/y/z coordinates, relative
+// to the center of the hexapod.
+func (leg *Leg) SetGoal(p Point3d) {
+	_, femur, _, _ := leg.segments()
+
+	v := &ik.Vector3{p.X, p.Y, p.Z}
 	vv := v.Add(ik.Vector3{0, 64, 0})
 
 	// Solve the angle of the coxa by looking at the position of the target from
