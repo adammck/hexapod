@@ -79,8 +79,6 @@ func (leg *Leg) SetGoal(x float64, y float64, z float64) {
 	opp := v.Z - leg.Origin.Z
 	theta := deg(math.Atan2(-opp, adj))
 	coxaAngle := (leg.Angle - theta)
-	coxa.Angle = *ik.MakeSingularEulerAngle(ik.RotationHeading, 0 - coxaAngle)
-	//fmt.Printf("coxaAngle=%0.4f (s/o=%0.4f) (s/v=%0.4f) (e/o=%0.4f) (e/v=%0.4f)\n", coxaAngle, coxa.Start().Distance(ik.ZeroVector3), coxa.Start().Distance(*v), coxa.End().Distance(ik.ZeroVector3), coxa.End().Distance(*v))
 
 	// Solve the other joints with a bunch of trig. Since we've already set the Y
 	// rotation and the other joints only rotate around X (relative to the coxa,
@@ -88,7 +86,7 @@ func (leg *Leg) SetGoal(x float64, y float64, z float64) {
 
 	r := femur.Start()
 	t := r
-	t.Y = v.Y
+	t.Y = -50
 
 	a := 100.0 // femur length
 	b := 85.0  // tibia length
@@ -97,7 +95,6 @@ func (leg *Leg) SetGoal(x float64, y float64, z float64) {
 	e := r.Distance(*v)
 	f := r.Distance(t)
 	g := t.Distance(*v)
-	//fmt.Printf("a=%0.4f, b=%0.4f, c=%0.4f, d=%0.4f, e=%0.4f, f=%0.4f, g=%0.4f\n", a, b, c, d, e, f, g)
 
 	aa := _sss(b, a, d)
 	bb := _sss(c, d, e)
@@ -105,19 +102,23 @@ func (leg *Leg) SetGoal(x float64, y float64, z float64) {
 	dd := _sss(a, d, b)
 	ee := _sss(e, c, d)
 	hh := 180 - aa - dd
-	//fmt.Printf("aa=%0.4f, bb=%0.4f, cc=%0.4f, dd=%0.4f, ee=%0.4f\n", aa, bb, cc, dd, ee)
 
 	femurAngle := (aa + bb + cc) - 90
-	femur.Angle = *ik.MakeSingularEulerAngle(ik.RotationBank, 0 - femurAngle)
-	//fmt.Printf("femurAngle=%0.4f\n", femurAngle)
-
 	tibiaAngle := 180 - hh
-	tibia.Angle = *ik.MakeSingularEulerAngle(ik.RotationBank, 0 - tibiaAngle)
-	//fmt.Printf("tibiaAngle=%0.4f\n", tibiaAngle)
-
 	tarsusAngle := 180 - (dd + ee)
-	tarsus.Angle = *ik.MakeSingularEulerAngle(ik.RotationBank, 0 - tarsusAngle)
-	//fmt.Printf("tarsusAngle=%0.4f\n", tarsusAngle)
+
+	//coxa.Angle = *ik.MakeSingularEulerAngle(ik.RotationHeading, 0 - coxaAngle)
+	//femur.Angle = *ik.MakeSingularEulerAngle(ik.RotationBank, 0 - femurAngle)
+	//tibia.Angle = *ik.MakeSingularEulerAngle(ik.RotationBank, 0 - tibiaAngle)
+	//tarsus.Angle = *ik.MakeSingularEulerAngle(ik.RotationBank, 0 - tarsusAngle)
+
+	// fmt.Printf("v=%v, vv=%v, r=%v, t=%v\n", v, vv, r, t)
+	// fmt.Printf("a=%0.4f, b=%0.4f, c=%0.4f, d=%0.4f, e=%0.4f, f=%0.4f, g=%0.4f\n", a, b, c, d, e, f, g)
+	// fmt.Printf("aa=%0.4f, bb=%0.4f, cc=%0.4f, dd=%0.4f, ee=%0.4f\n", aa, bb, cc, dd, ee)
+	// fmt.Printf("coxaAngle=%0.4f (s/o=%0.4f) (s/v=%0.4f) (e/o=%0.4f) (e/v=%0.4f)\n", coxaAngle, coxa.Start().Distance(ik.ZeroVector3), coxa.Start().Distance(*v), coxa.End().Distance(ik.ZeroVector3), coxa.End().Distance(*v))
+	// fmt.Printf("femurAngle=%0.4f (s/o=%0.4f) (s/v=%0.4f) (e/o=%0.4f) (e/v=%0.4f)\n", femurAngle, femur.Start().Distance(ik.ZeroVector3), femur.Start().Distance(*v), femur.End().Distance(ik.ZeroVector3), femur.End().Distance(*v))
+	// fmt.Printf("tibiaAngle=%0.4f (s/o=%0.4f) (s/v=%0.4f) (e/o=%0.4f) (e/v=%0.4f)\n", tibiaAngle, tibia.Start().Distance(ik.ZeroVector3), tibia.Start().Distance(*v), tibia.End().Distance(ik.ZeroVector3), tibia.End().Distance(*v))
+	// fmt.Printf("tarsusAngle=%0.4f (s/o=%0.4f) (s/v=%0.4f) (e/o=%0.4f) (e/v=%0.4f)\n", tarsusAngle, tarsus.Start().Distance(ik.ZeroVector3), tarsus.Start().Distance(*v), tarsus.End().Distance(ik.ZeroVector3), tarsus.End().Distance(*v))
 
 	if math.IsNaN(coxaAngle) || math.IsNaN(femurAngle) || math.IsNaN(tibiaAngle) || math.IsNaN(tarsusAngle) {
 		fmt.Println("ERROR")

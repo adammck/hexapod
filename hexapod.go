@@ -104,14 +104,13 @@ func (hexapod *Hexapod) setMoveSpeed(speed int) {
 func (hexapod *Hexapod) Demo() {
 	hexapod.setMoveSpeed(128)
 
-	radius := 230.0
-	step := -10.0
-	min := -200.0
-	max := -70.0
+	radius := 220.0
+	step := -5.0
+	min := -230.0
+	max := 30.0
 	y := max
 
 	for {
-
 		hexapod.Sync(func() {
 			fmt.Printf("----> %0.4f\n", y)
 			for _, leg := range hexapod.Legs {
@@ -120,11 +119,15 @@ func (hexapod *Hexapod) Demo() {
 				leg.SetGoal(x, y, -z)
 			}
 
-			//time.Sleep(20 * time.Millisecond)
+			//time.Sleep(200 * time.Millisecond)
 		})
 
+		if min == max {
+			break
+		}
+
 		y += step
-		if y < min || y > max {
+		if y <= min || y >= max {
 			step = 0 - step
 		}
 	}
