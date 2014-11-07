@@ -86,7 +86,7 @@ func (leg *Leg) SetGoal(p Point3d) {
 	adj := v.X - leg.Origin.X
 	opp := v.Z - leg.Origin.Z
 	theta := deg(math.Atan2(-opp, adj))
-	coxaAngle := (leg.Angle - theta)
+	coxaAngle := (theta - leg.Angle)
 
 	// Solve the other joints with a bunch of trig. Since we've already set the Y
 	// rotation and the other joints only rotate around X (relative to the coxa,
