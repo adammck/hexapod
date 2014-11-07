@@ -1,16 +1,22 @@
 package hexapod
 
 import (
-	"github.com/adammck/dynamixel"
-	"github.com/jacobsa/go-serial/serial"
-	"time"
-	"math"
 	"fmt"
+	"github.com/adammck/dynamixel"
+	"github.com/adammck/retroport"
+	"github.com/jacobsa/go-serial/serial"
+	"math"
+	"time"
 )
 
 type Hexapod struct {
-	Network *dynamixel.DynamixelNetwork
-	Legs    [6]*Leg
+	Network         *dynamixel.DynamixelNetwork
+	Controller      *retroport.SNES
+	CurrentPosition Point3d
+	TargetPosition  Point3d
+	CurrentRotation float64
+	TargetRotation  float64
+	Legs            [6]*Leg
 }
 
 //
@@ -18,17 +24,21 @@ type Hexapod struct {
 //
 func NewHexapod(network *dynamixel.DynamixelNetwork) *Hexapod {
 	return &Hexapod{
-		Network: network,
+		Network:         network,
+		CurrentPosition: Point3d{0, 0, 0},
+		TargetPosition:  Point3d{0, 0, 0},
+		CurrentRotation: 0.0,
+		TargetRotation:  0.0,
 		Legs: [6]*Leg{
 
 			// Points are the X/Y/Z offsets from the center of the top of the body to
 			// the center of the coxa pivots.
-			NewLeg(network, 10, NewPoint(-51.1769, -19,  98), -120), // Front Left  - 0
-			NewLeg(network, 20, NewPoint(51.1769,  -19,  98),  -60), // Front Right - 1
-			NewLeg(network, 30, NewPoint(66,       -19,   0),    0), // Mid Right   - 2
-			NewLeg(network, 40, NewPoint(51.1769,  -19, -98),   60), // Back Right  - 3
-			NewLeg(network, 50, NewPoint(-51.1769, -19, -98),  120), // Back Left   - 4
-			NewLeg(network, 60, NewPoint(-66,      -19,   0),  180), // Mid Left    - 5
+			NewLeg(network, 10, "FL", NewPoint(-51.1769, -19, 98), -120), // Front Left  - 0
+			NewLeg(network, 20, "FR", NewPoint(51.1769, -19, 98), -60),   // Front Right - 1
+			NewLeg(network, 30, "MR", NewPoint(66, -19, 0), 0),           // Mid Right   - 2
+			NewLeg(network, 40, "BR", NewPoint(51.1769, -19, -98), 60),   // Back Right  - 3
+			NewLeg(network, 50, "BL", NewPoint(-51.1769, -19, -98), 120), // Back Left   - 4
+			NewLeg(network, 60, "ML", NewPoint(-66, -19, 0), 180),        // Mid Left    - 5
 		},
 	}
 }
@@ -74,6 +84,11 @@ func (hexapod *Hexapod) Sync(f func()) {
 	hexapod.Network.Action()
 }
 
+func (hexapod *Hexapod) SyncWait(f func(), ms int) {
+	hexapod.Sync(f)
+	time.Sleep(time.Duration(ms) * time.Millisecond)
+}
+
 //
 // SyncLegs runs the given function once for each leg while the network is in
 // buffered mode, then initiates movements with ACTION. This is useful when
@@ -97,7 +112,6 @@ func (hexapod *Hexapod) setMoveSpeed(speed int) {
 		}
 	}
 }
-
 
 // Demo moves the legs around arbitrarily to demonstrate that everything is
 // working as it should.
@@ -133,88 +147,195 @@ func (hexapod *Hexapod) Demo() {
 	}
 }
 
+// MainLoop watches for changes to the target position and rotation, and tries
+// to apply it as gracefully as possible.
+func (hexapod *Hexapod) MainLoop() {
+	for {
+		if hexapod.TargetRotation != hexapod.CurrentRotation {
+			fmt.Printf("Rotate to: %0.4f\n", hexapod.TargetRotation)
+			hexapod.CurrentRotation = hexapod.TargetRotation
+		}
+
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
 // Rotate just rotates the hexapod in a counter-clockwise circle forever.
-func (hexapod *Hexapod) Rotate() {
-	hexapod.setMoveSpeed(256)
+func (h *Hexapod) CrapRotate() {
+	h.setMoveSpeed(256)
 
 	// settings
 	radius := 220.0
 	footDown := -100.0
-	footUp := -80.0
-	sleep := 100 * time.Millisecond
+	footUp := -60.0
+	sleep := 100
+	stepSize := 50.0
 
-	// tmp
-	currentDeg := 0.0
-	targetDeg := 15.0
+	// controls
+	up := false
+	rot := 0.0
+	mov := Point3d{}
+	quit := false
 
-	// set all legs to their default position
-	hexapod.Sync(func() {
-		for _, leg := range hexapod.Legs {
-			x := math.Cos(rad(currentDeg + leg.Angle)) * radius
-			z := math.Sin(rad(currentDeg + leg.Angle)) * radius
-			leg.SetGoal(Point3d{x, footDown, -z})
+	// state
+	isUp := false
+
+	// move legs in groups of two, for stability
+	legSets := [][]int{
+		[]int{0, 3},
+		[]int{1, 4},
+		[]int{2, 5},
+	}
+
+	// or three, for maximum speed
+	// legSets := [][]int{
+	// 	[]int{0, 2, 4},
+	// 	[]int{1, 3, 5},
+	// }
+
+	footPos := func(debug bool, leg *Leg, angle float64, movX float64, movZ float64, altitude float64) Point3d {
+		r := rad(leg.Angle-angle)
+
+		x := math.Cos(r) * radius
+		z := math.Sin(r) * radius
+		p := Point3d{x, altitude, -z}
+
+		if debug {
+			// opp := (x+movX)-leg.Origin.X
+			// adj := (-z+movZ) - leg.Origin.Z
+			// theta := math.Atan2(-opp, adj)
+			fmt.Printf("%s: %+0.4f,%+0.4f -> %+0.4f,%+0.4f -> %+0.4f,%+0.4f\n", leg.Name, leg.Origin.X, leg.Origin.Z, x, -z, x+movX, (-z)+movZ)
+			//fmt.Printf("%s: adj=%0.4f, opp=%0.4f, theta=%0.4f\n", leg.Name, opp, adj, theta)
 		}
-	})
 
-	time.Sleep(sleep * 2)
+		return p
+	}
+
+	setFoot := func(debug bool, leg *Leg, angle float64, movX float64, movZ float64, altitude float64) {
+		leg.SetGoal(footPos(debug, leg, angle, movX, movZ, altitude))
+	}
+
+	setFeet := func(debug bool, i int, angle float64, movX float64, movZ float64, altitude float64) {
+		for _, ii := range legSets[i] {
+			setFoot(debug, h.Legs[ii], angle, movX, movZ, altitude)
+		}
+	}
+
+	// main loop!
 
 	for {
-		degOffset := targetDeg - currentDeg
 
-		for _, leg := range hexapod.Legs {
+		// READ STATE
 
-			// calculate current foot targets
-			cX := math.Cos(rad(leg.Angle)) * radius
-			cZ := math.Sin(rad(leg.Angle)) * radius
+		rot = 0
+		mov = Point3d{0, 0, 0}
 
-			// calculate eventual foot targets
-			tX := math.Cos(rad(leg.Angle - degOffset)) * radius
-			tZ := math.Sin(rad(leg.Angle - degOffset)) * radius
-
-			// do nothing if the leg is already at it's target position
-			if cX == tX && cZ == tZ {
-				break
-			}
-
-			// raise the foot
-			hexapod.Sync(func() {
-				leg.SetGoal(Point3d{cX, footUp, -cZ})
-			})
-
-			time.Sleep(sleep)
-
-			// move to the target position, still raised
-			hexapod.Sync(func() {
-				leg.SetGoal(Point3d{tX, footUp, -tZ})
-			})
-
-			time.Sleep(sleep)
-
-			// lower the foot
-			hexapod.Sync(func() {
-				leg.SetGoal(Point3d{tX, footDown, -tZ})
-			})
-
-			time.Sleep(sleep)
+		if h.Controller.L {
+			rot = 20
 		}
 
-		// update position
-		currentDeg += 10
-		targetDeg += 10
+		if h.Controller.R {
+			rot = -20
+		}
 
-		// twist back to straight
-		hexapod.Sync(func() {
-			for _, leg := range hexapod.Legs {
-				x := math.Cos(rad(leg.Angle)) * radius
-				z := math.Sin(rad(leg.Angle)) * radius
-				leg.SetGoal(Point3d{x, footDown, -z})
+		if h.Controller.Up {
+			mov.Z = stepSize
+		}
+
+		if h.Controller.Down {
+			mov.Z = -stepSize
+		}
+
+		if h.Controller.Left {
+			mov.X = -stepSize
+		}
+
+		if h.Controller.Right {
+			mov.X = stepSize
+		}
+
+		// Lower body
+		if h.Controller.Y {
+			footDown += 10
+			isUp = false
+		}
+
+		// Raise body
+		if h.Controller.X {
+			footDown -= 10
+			isUp = false
+		}
+
+		// toggle active state
+		if h.Controller.Start {
+			up = !up
+		}
+
+		// quit
+		if h.Controller.Select {
+			up = false
+			quit = true
+		}
+
+		// MOVE
+
+		// stand up
+		if up && !isUp {
+			h.SyncWait(func() {
+				for _, leg := range h.Legs {
+					setFoot(false, leg, 0, 0, 0, footDown)
+				}
+			}, 100)
+			isUp = true
+
+			// sit down
+		} else if !up && isUp {
+			h.SyncWait(func() {
+				for _, leg := range h.Legs {
+					setFoot(false, leg, 0, 0, 0, footUp)
+				}
+			}, 1000)
+			isUp = false
+		}
+
+		if !quit && isUp && (rot != 0 || mov.X != 0 || mov.Z != 0) {
+			for i, _ := range legSets {
+
+				// three-step:
+				// * raise the foot
+				// * move to the target offset
+				// * lower the foot
+				h.SyncWait(func() { setFeet(false, i, 0,   0,     0,    footUp) }, sleep)
+				h.SyncWait(func() { setFeet(false, i, rot, mov.X, mov.Z, footUp) }, sleep)
+				h.SyncWait(func() { setFeet(false, i, rot, mov.X, mov.Z, footDown) }, sleep)
+				//h.SyncWait(func() { setFeet(false, i, 0, 0, 0, footUp) }, sleep)
+				//h.SyncWait(func() { setFeet(false, i, 0, 0, 0, footDown) }, sleep)
+
+				// two-step:
+				// h.SyncWait(func() { setFeet(i, rot*0.5, footUp) }, sleep)
+				// h.SyncWait(func() { setFeet(i, rot, footDown) }, sleep)
 			}
-		})
 
-		time.Sleep(sleep)
+			time.Sleep(50 * time.Millisecond)
+
+			// untwist
+			h.SyncWait(func() {
+				for _, leg := range h.Legs {
+					setFoot(false, leg, 0, 0, 0, footDown)
+				}
+			}, sleep)
+
+			// yield if there's nothing to do
+		} else {
+			time.Sleep(20 * time.Millisecond)
+		}
+
+		if quit {
+			h.Relax()
+			return
+		}
 	}
 }
-
 
 //
 // Shutdown moves all servos to a hard-coded default position, then turns them
@@ -237,7 +358,10 @@ func (hexapod *Hexapod) Shutdown() {
 
 	// TODO: Wait for servos to stop moving, instead of hard-coding a timer.
 	wait(2000)
+	hexapod.Relax()
+}
 
+func (hexapod *Hexapod) Relax() {
 	for _, leg := range hexapod.Legs {
 		for _, servo := range leg.Servos() {
 			servo.SetTorqueEnable(false)

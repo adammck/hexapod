@@ -4,8 +4,8 @@ import (
   "flag"
   "fmt"
   "os"
+  "time"
   "github.com/adammck/hexapod"
-  "github.com/adammck/retroport"
 )
 
 var (
@@ -23,17 +23,20 @@ func main() {
   }
 
   h.Network.Debug = *debug
+  //h.setMoveSpeed(128)
 
-  // open and connect the controller
-  f, err := os.Open("/dev/hidraw0")
-  if err != nil {
-    fmt.Println(err)
-    os.Exit(1)
+  for i, leg := range h.Legs {
+    fmt.Println(i)
+    leg.Coxa.MoveTo(-40)
+    time.Sleep(500 * time.Millisecond)
+
+    leg.Coxa.MoveTo(40)
+    time.Sleep(500 * time.Millisecond)
+
+    leg.Coxa.MoveTo(0)
+    time.Sleep(500 * time.Millisecond)
+    fmt.Println("x")
   }
-  h.Controller = retroport.MakeSNES(f)
-  go h.Controller.Run()
 
-  // start rotating!
-  h.CrapRotate()
   os.Exit(0)
 }
