@@ -138,11 +138,3 @@ func (leg *Leg) SetGoal(p Point3d) {
 	leg.Tibia.MoveTo(tibiaAngle)
 	leg.Tarsus.MoveTo(tarsusAngle)
 }
-
-func deg(rads float64) float64 {
-	return rads / (math.Pi / 180)
-}
-
-func rad(degrees float64) float64 {
-	return (math.Pi / 180) * degrees
-}
