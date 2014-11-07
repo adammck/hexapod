@@ -10,12 +10,17 @@ import (
 )
 
 type Hexapod struct {
-	Network         *dynamixel.DynamixelNetwork
-	Controller      *retroport.SNES
+	Network    *dynamixel.DynamixelNetwork
+	Controller *retroport.SNES
+
+	// The world coordinates of the center of the hexapod.
 	CurrentPosition Point3d
+
+	// ???
 	TargetPosition  Point3d
 	CurrentRotation float64
 	TargetRotation  float64
+	StepRadius      float64
 	Legs            [6]*Leg
 }
 
@@ -29,6 +34,7 @@ func NewHexapod(network *dynamixel.DynamixelNetwork) *Hexapod {
 		TargetPosition:  Point3d{0, 0, 0},
 		CurrentRotation: 0.0,
 		TargetRotation:  0.0,
+		StepRadius:      220,
 		Legs: [6]*Leg{
 
 			// Points are the X/Y/Z offsets from the center of the top of the body to
@@ -113,50 +119,102 @@ func (hexapod *Hexapod) setMoveSpeed(speed int) {
 	}
 }
 
-// Demo moves the legs around arbitrarily to demonstrate that everything is
-// working as it should.
-func (hexapod *Hexapod) Demo() {
-	hexapod.setMoveSpeed(128)
+const (
+	sInit  = iota
+	sStand = iota
+)
 
-	radius := 220.0
-	step := -5.0
-	min := -220.0
-	max := 30.0
-	y := max
-
-	for {
-		hexapod.Sync(func() {
-			fmt.Printf("----> %0.4f\n", y)
-			for _, leg := range hexapod.Legs {
-				x := math.Cos(rad(leg.Angle)) * radius
-				z := math.Sin(rad(leg.Angle)) * radius
-				leg.SetGoal(Point3d{x, y, -z})
-			}
-
-			//time.Sleep(200 * time.Millisecond)
-		})
-
-		if min == max {
-			break
-		}
-
-		y += step
-		if y <= min || y >= max {
-			step = 0 - step
-		}
-	}
+func (h *Hexapod) initialFootPosition(leg *Leg) *Point3d {
+	o := h.CurrentPosition
+	r := rad(leg.Angle)
+	//r := rad(leg.Angle - angle)
+	x := math.Cos(r) * h.StepRadius
+	z := -math.Sin(r) * h.StepRadius
+	return &Point3d{x - o.X, -40 - o.Y, z - o.Z}
 }
 
 // MainLoop watches for changes to the target position and rotation, and tries
 // to apply it as gracefully as possible.
-func (hexapod *Hexapod) MainLoop() {
+func (h *Hexapod) MainLoop() {
+	h.setMoveSpeed(128)
+
+	// Shorthand
+	o := h.CurrentPosition
+
+	// Valid state
+	state := sInit
+
+	// settings
+	footDown := -80.0
+	mov := 5.0
+
+	// World foot positions
+	feet := [6]*Point3d{
+		h.initialFootPosition(h.Legs[0]),
+		h.initialFootPosition(h.Legs[1]),
+		h.initialFootPosition(h.Legs[2]),
+		h.initialFootPosition(h.Legs[3]),
+		h.initialFootPosition(h.Legs[4]),
+		h.initialFootPosition(h.Legs[5]),
+	}
+
 	for {
-		if hexapod.TargetRotation != hexapod.CurrentRotation {
-			fmt.Printf("Rotate to: %0.4f\n", hexapod.TargetRotation)
-			hexapod.CurrentRotation = hexapod.TargetRotation
+		// At any time, pressing select terminates. (Do this rather than using INT,
+		// to turn off the servos.)
+		if h.Controller.Select {
+			h.Relax()
+			return
 		}
 
-		time.Sleep(100 * time.Millisecond)
+		switch state {
+
+		// While initializing, push the feet downloads to lift the hex off the
+		// ground. This is to reduce torque on the joints when moving into the
+		// initial stance.
+		case sInit:
+			for _, foot := range feet {
+				foot.Y -= 2
+			}
+
+			if feet[0].Y <= footDown {
+				state = sStand
+			}
+
+		case sStand:
+			if h.Controller.Up {
+				o.Z += mov
+			}
+			if h.Controller.Down {
+				o.Z -= mov
+			}
+			if h.Controller.Left {
+				o.X -= mov
+			}
+			if h.Controller.Right {
+				o.X += mov
+			}
+			if h.Controller.Y {
+				o.Y -= mov
+			}
+			if h.Controller.X {
+				o.Y += mov
+			}
+
+		default:
+			fmt.Println("unknown state!")
+			return
+		}
+
+		// Update the position of each foot
+		h.Sync(func() {
+			for i, leg := range h.Legs {
+				pp := Point3d{feet[i].X - o.X, feet[i].Y - o.Y, feet[i].Z - o.Z}
+				leg.SetGoal(pp)
+			}
+		})
+
+		//altitude = altitude - 1
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 
@@ -165,7 +223,6 @@ func (h *Hexapod) CrapRotate() {
 	h.setMoveSpeed(256)
 
 	// settings
-	radius := 220.0
 	footDown := -100.0
 	footUp := -60.0
 	sleep := 100
@@ -196,8 +253,8 @@ func (h *Hexapod) CrapRotate() {
 	footPos := func(debug bool, leg *Leg, angle float64, movX float64, movZ float64, altitude float64) Point3d {
 		r := rad(leg.Angle - angle)
 
-		x := math.Cos(r) * radius
-		z := math.Sin(r) * radius
+		x := math.Cos(r) * h.StepRadius
+		z := math.Sin(r) * h.StepRadius
 		p := Point3d{x, altitude, -z}
 
 		if debug {

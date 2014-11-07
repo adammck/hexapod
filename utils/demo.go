@@ -34,6 +34,6 @@ func main() {
   go h.Controller.Run()
 
   // start rotating!
-  h.CrapRotate()
+  h.MainLoop()
   os.Exit(0)
 }

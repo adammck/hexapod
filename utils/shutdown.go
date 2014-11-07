@@ -22,5 +22,5 @@ func main() {
 	}
 
 	h.Network.Debug = *debug
-	h.Shutdown()
+	h.Relax()
 }
