@@ -1,31 +1,31 @@
 package hexapod
 
 import (
+	"fmt"
 	"github.com/adammck/dynamixel"
 	"github.com/adammck/ik"
-	"fmt"
 	"math"
 )
 
 type Leg struct {
-	Origin  *Point3d
-	Angle   float64
-	Name    string
-	Coxa    *dynamixel.DynamixelServo
-	Femur   *dynamixel.DynamixelServo
-	Tibia   *dynamixel.DynamixelServo
-	Tarsus  *dynamixel.DynamixelServo
+	Origin *Point3d
+	Angle  float64
+	Name   string
+	Coxa   *dynamixel.DynamixelServo
+	Femur  *dynamixel.DynamixelServo
+	Tibia  *dynamixel.DynamixelServo
+	Tarsus *dynamixel.DynamixelServo
 }
 
 func NewLeg(network *dynamixel.DynamixelNetwork, baseId int, name string, origin *Point3d, angle float64) *Leg {
 	return &Leg{
-		Origin:  origin,
-		Angle:   angle,
-		Name:    name,
-		Coxa:    dynamixel.NewServo(network, uint8(baseId+1)),
-		Femur:   dynamixel.NewServo(network, uint8(baseId+2)),
-		Tibia:   dynamixel.NewServo(network, uint8(baseId+3)),
-		Tarsus:  dynamixel.NewServo(network, uint8(baseId+4)),
+		Origin: origin,
+		Angle:  angle,
+		Name:   name,
+		Coxa:   dynamixel.NewServo(network, uint8(baseId+1)),
+		Femur:  dynamixel.NewServo(network, uint8(baseId+2)),
+		Tibia:  dynamixel.NewServo(network, uint8(baseId+3)),
+		Tarsus: dynamixel.NewServo(network, uint8(baseId+4)),
 	}
 }
 
@@ -50,7 +50,7 @@ func (leg *Leg) calculateCoxaAngle(v ik.Vector3) float64 {
 
 // http://en.wikipedia.org/wiki/Solution_of_triangles#Three_sides_given_.28SSS.29
 func _sss(a float64, b float64, c float64) float64 {
-	return deg(math.Acos(((b*b) + (c*c) - (a*a)) / (2 * b * c)))
+	return deg(math.Acos(((b * b) + (c * c) - (a * a)) / (2 * b * c)))
 }
 
 func (leg *Leg) segments() (*ik.Segment, *ik.Segment, *ik.Segment, *ik.Segment) {
@@ -62,10 +62,10 @@ func (leg *Leg) segments() (*ik.Segment, *ik.Segment, *ik.Segment, *ik.Segment) 
 	r2 := ik.MakeSegment("r2", r1, *ik.MakePair(ik.RotationHeading, leg.Angle, leg.Angle), *ik.MakeVector3(0, 0, 0))
 
 	// Movable segments (angles in deg, vectors in mm)
-	coxa   := ik.MakeSegment("coxa",   r2,    *ik.MakePair(ik.RotationHeading, 40,  -40), *ik.MakeVector3(39, -12,  0))
-	femur  := ik.MakeSegment("femur",  coxa,  *ik.MakePair(ik.RotationBank,    90,    0), *ik.MakeVector3(100,  0,  0))
-	tibia  := ik.MakeSegment("tibia",  femur, *ik.MakePair(ik.RotationBank,     0, -135), *ik.MakeVector3(85,   0,  0))
-	tarsus := ik.MakeSegment("tarsus", tibia, *ik.MakePair(ik.RotationBank,    90,  -90), *ik.MakeVector3(76.5, 0,  0))
+	coxa := ik.MakeSegment("coxa", r2, *ik.MakePair(ik.RotationHeading, 40, -40), *ik.MakeVector3(39, -12, 0))
+	femur := ik.MakeSegment("femur", coxa, *ik.MakePair(ik.RotationBank, 90, 0), *ik.MakeVector3(100, 0, 0))
+	tibia := ik.MakeSegment("tibia", femur, *ik.MakePair(ik.RotationBank, 0, -135), *ik.MakeVector3(85, 0, 0))
+	tarsus := ik.MakeSegment("tarsus", tibia, *ik.MakePair(ik.RotationBank, 90, -90), *ik.MakeVector3(76.5, 0, 0))
 
 	// Return just the useful segments
 	return coxa, femur, tibia, tarsus
@@ -142,7 +142,6 @@ func (leg *Leg) SetGoal(p Point3d) {
 func deg(rads float64) float64 {
 	return rads / (math.Pi / 180)
 }
-
 
 func rad(degrees float64) float64 {
 	return (math.Pi / 180) * degrees

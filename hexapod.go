@@ -194,7 +194,7 @@ func (h *Hexapod) CrapRotate() {
 	// }
 
 	footPos := func(debug bool, leg *Leg, angle float64, movX float64, movZ float64, altitude float64) Point3d {
-		r := rad(leg.Angle-angle)
+		r := rad(leg.Angle - angle)
 
 		x := math.Cos(r) * radius
 		z := math.Sin(r) * radius
@@ -305,7 +305,7 @@ func (h *Hexapod) CrapRotate() {
 				// * raise the foot
 				// * move to the target offset
 				// * lower the foot
-				h.SyncWait(func() { setFeet(false, i, 0,   0,     0,    footUp) }, sleep)
+				h.SyncWait(func() { setFeet(false, i, 0, 0, 0, footUp) }, sleep)
 				h.SyncWait(func() { setFeet(false, i, rot, mov.X, mov.Z, footUp) }, sleep)
 				h.SyncWait(func() { setFeet(false, i, rot, mov.X, mov.Z, footDown) }, sleep)
 				//h.SyncWait(func() { setFeet(false, i, 0, 0, 0, footUp) }, sleep)
