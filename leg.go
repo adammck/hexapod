@@ -39,6 +39,12 @@ func (leg *Leg) Servos() [4]*dynamixel.DynamixelServo {
 	}
 }
 
+func (leg *Leg) SetLED(state bool) {
+	for _, s := range leg.Servos() {
+		s.SetLed(state)
+	}
+}
+
 // calculateCoxaAngle calculates the angle (in degrees) which the coxa should be
 // set to, for the target vector to be reachable.
 func (leg *Leg) calculateCoxaAngle(v ik.Vector3) float64 {

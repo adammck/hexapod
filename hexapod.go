@@ -9,12 +9,27 @@ import (
 	"time"
 )
 
+type State int
+
+const (
+	sInit     State = iota
+	sStandUp  State = iota
+	sStand    State = iota
+	sStepUp   State = iota
+	sStepOver State = iota
+	sStepDown State = iota
+)
+
 type Hexapod struct {
 	Network    *dynamixel.DynamixelNetwork
 	Controller *retroport.SNES
 
 	// The world coordinates of the center of the hexapod.
 	CurrentPosition Point3d
+
+	// The state that the hexapod is currently in.
+	State           State
+	stateCounter    int
 
 	// ???
 	TargetPosition  Point3d
@@ -79,6 +94,11 @@ func NewHexapodFromPortName(portName string) (*Hexapod, error) {
 	return hexapod, nil
 }
 
+func (h *Hexapod) SetState(s State) {
+	h.stateCounter = 0
+	h.State = s
+}
+
 //
 // Sync runs the given function while the network is in buffered mode, then
 // initiates any movements at once by sending ACTION.
@@ -119,46 +139,93 @@ func (hexapod *Hexapod) setMoveSpeed(speed int) {
 	}
 }
 
-const (
-	sInit  = iota
-	sStand = iota
-)
-
-func (h *Hexapod) initialFootPosition(leg *Leg) *Point3d {
-	o := h.CurrentPosition
+func (h *Hexapod) homeFootPosition(leg *Leg, o Point3d) *Point3d {
+	//o := h.CurrentPosition
 	r := rad(leg.Angle)
 	//r := rad(leg.Angle - angle)
 	x := math.Cos(r) * h.StepRadius
 	z := -math.Sin(r) * h.StepRadius
-	return &Point3d{x - o.X, -40 - o.Y, z - o.Z}
+	return &Point3d{o.X + x, o.Y - 20, o.Z + z}
 }
 
 // MainLoop watches for changes to the target position and rotation, and tries
 // to apply it as gracefully as possible.
 func (h *Hexapod) MainLoop() {
-	h.setMoveSpeed(128)
+	h.setMoveSpeed(256)
 
 	// Shorthand
 	o := h.CurrentPosition
 
-	// Valid state
-	state := sInit
+	// Initial state
+	h.State = sInit
 
 	// settings
-	footDown := -80.0
 	mov := 5.0
+	footUp := -40.0
+	footDown := -80.0
 
 	// World foot positions
 	feet := [6]*Point3d{
-		h.initialFootPosition(h.Legs[0]),
-		h.initialFootPosition(h.Legs[1]),
-		h.initialFootPosition(h.Legs[2]),
-		h.initialFootPosition(h.Legs[3]),
-		h.initialFootPosition(h.Legs[4]),
-		h.initialFootPosition(h.Legs[5]),
+		h.homeFootPosition(h.Legs[0], o),
+		h.homeFootPosition(h.Legs[1], o),
+		h.homeFootPosition(h.Legs[2], o),
+		h.homeFootPosition(h.Legs[3], o),
+		h.homeFootPosition(h.Legs[4], o),
+		h.homeFootPosition(h.Legs[5], o),
 	}
 
+	// World positions of the NEXT foot position. These are nil if we're okay with
+	// where the foot is now, but are set when the foot should be relocated.
+	nextFeet := [6]*Point3d{
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+	}
+
+ 	// move legs in groups of two, for stability
+	legSets := [][]int{
+		[]int{0, 3},
+		[]int{1, 4},
+		[]int{2, 5},
+	}
+
+	// Which legset are we currently stepping?
+	sLegsIndex := 0
+
 	for {
+
+		if h.Controller.Up {
+			o.Z += mov
+		}
+
+		if h.Controller.Down {
+			o.Z -= mov
+		}
+
+		if h.Controller.Left {
+			o.X -= mov
+		}
+
+		if h.Controller.Right {
+			o.X += mov
+		}
+
+		if h.Controller.Y {
+			o.Y -= mov
+		}
+
+		if h.Controller.X {
+			o.Y += mov
+		}
+
+		if h.Controller.B {
+			h.State = sStepUp
+			sLegsIndex = 0
+		}
+
 		// At any time, pressing select terminates. (Do this rather than using INT,
 		// to turn off the servos.)
 		if h.Controller.Select {
@@ -166,38 +233,73 @@ func (h *Hexapod) MainLoop() {
 			return
 		}
 
-		switch state {
+		switch h.State {
+		case sInit:
 
-		// While initializing, push the feet downloads to lift the hex off the
+			// Pause at this state for a while, then stand up.
+			if h.stateCounter >= 20 {
+				h.SetState(sStandUp)
+			}
+
+		// After initializing, push the feet downloads to lift the hex off the
 		// ground. This is to reduce torque on the joints when moving into the
 		// initial stance.
-		case sInit:
+		case sStandUp:
 			for _, foot := range feet {
-				foot.Y -= 2
+				foot.Y -= 5
 			}
 
+			// Once we've stood up, advance to the standing state.
 			if feet[0].Y <= footDown {
-				state = sStand
+				h.SetState(sStand)
 			}
 
+		// TODO: Move feet back to home positions when standing!
 		case sStand:
-			if h.Controller.Up {
-				o.Z += mov
-			}
-			if h.Controller.Down {
-				o.Z -= mov
-			}
-			if h.Controller.Left {
-				o.X -= mov
-			}
-			if h.Controller.Right {
-				o.X += mov
-			}
-			if h.Controller.Y {
-				o.Y -= mov
-			}
-			if h.Controller.X {
-				o.Y += mov
+
+		case sStepUp:
+			if(h.stateCounter == 1) {
+				for _, ii := range legSets[sLegsIndex] {
+					h.Legs[ii].SetLED(true)
+					feet[ii].Y = footUp
+				}
+
+			// TODO: Project the next step position, rather than just moving it home
+			//       every time. This will half (!!) the number of steps to move in a
+			//       constant direciton.
+			}// else if (h.stateCounter >= 2) {
+				for _, ii := range legSets[sLegsIndex] {
+					nextFeet[ii] = h.homeFootPosition(h.Legs[ii], o)
+				}
+
+				h.SetState(sStepOver)
+			//}
+
+		case sStepOver:
+			if(h.stateCounter == 1) {
+				for _, ii := range legSets[sLegsIndex] {
+					feet[ii].X = nextFeet[ii].X
+					feet[ii].Z = nextFeet[ii].Z
+				}
+
+			}// else if (h.stateCounter >= 2) {
+				h.SetState(sStepDown)
+			//}
+
+		case sStepDown:
+			if(h.stateCounter == 1) {
+				for _, ii := range legSets[sLegsIndex] {
+					h.Legs[ii].SetLED(false)
+					feet[ii].Y = footDown
+				}
+
+			} else if (h.stateCounter >= 2) {
+				h.SetState(sStepUp)
+				sLegsIndex += 1
+
+				if sLegsIndex >= len(legSets) {
+					sLegsIndex = 0
+				}
 			}
 
 		default:
@@ -213,7 +315,7 @@ func (h *Hexapod) MainLoop() {
 			}
 		})
 
-		//altitude = altitude - 1
+		h.stateCounter += 1
 		time.Sleep(10 * time.Millisecond)
 	}
 }
