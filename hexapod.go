@@ -26,6 +26,7 @@ type Hexapod struct {
 
 	// The world coordinates of the center of the hexapod.
 	CurrentPosition Point3d
+	CurrentRotation float64
 
 	// The state that the hexapod is currently in.
 	State           State
@@ -33,7 +34,6 @@ type Hexapod struct {
 
 	// ???
 	TargetPosition  Point3d
-	CurrentRotation float64
 	TargetRotation  float64
 	StepRadius      float64
 	Legs            [6]*Leg
@@ -155,6 +155,7 @@ func (h *Hexapod) MainLoop() {
 
 	// Shorthand
 	o := h.CurrentPosition
+	r := h.CurrentRotation
 
 	// Initial state
 	h.State = sInit
@@ -213,6 +214,14 @@ func (h *Hexapod) MainLoop() {
 			o.X += mov
 		}
 
+		if h.Controller.L {
+			r -= 10
+		}
+
+		if h.Controller.R {
+			r += 10
+		}
+
 		if h.Controller.Y {
 			o.Y -= mov
 		}
@@ -221,10 +230,10 @@ func (h *Hexapod) MainLoop() {
 			o.Y += mov
 		}
 
-		if h.Controller.B {
-			h.State = sStepUp
-			sLegsIndex = 0
-		}
+		// if h.Controller.B {
+		// 	h.State = sStepUp
+		// 	sLegsIndex = 0
+		// }
 
 		// At any time, pressing select terminates. (Do this rather than using INT,
 		// to turn off the servos.)
@@ -249,16 +258,31 @@ func (h *Hexapod) MainLoop() {
 				foot.Y -= 5
 			}
 
-			// Once we've stood up, advance to the standing state.
+			// Once we've stood up, advance to the walking state.
 			if feet[0].Y <= footDown {
 				h.SetState(sStand)
 			}
 
 		// TODO: Move feet back to home positions when standing!
 		case sStand:
+			needsMove := false
+			minStepDistance := mov * 2
+
+			for i, _ := range h.Legs {
+				a := h.homeFootPosition(h.Legs[i], o)
+				a.Y = feet[i].Y
+				if feet[i].Distance(*a) > minStepDistance {
+					needsMove = true
+				}
+			}
+
+			if needsMove {
+				h.SetState(sStepUp)
+			}
 
 		case sStepUp:
 			if(h.stateCounter == 1) {
+				//fmt.Println(sLegsIndex, legSets[sLegsIndex])
 				for _, ii := range legSets[sLegsIndex] {
 					h.Legs[ii].SetLED(true)
 					feet[ii].Y = footUp
@@ -269,6 +293,12 @@ func (h *Hexapod) MainLoop() {
 			//       constant direciton.
 			}// else if (h.stateCounter >= 2) {
 				for _, ii := range legSets[sLegsIndex] {
+					// home := h.homeFootPosition(h.Legs[ii], o)
+					// nextFeet[ii] = &Point3d{
+					// 	X: home.X - (feet[ii].X - home.X),
+					// 	Z: home.Z - (feet[ii].Z - home.Z),
+					// 	Y: home.Y,
+					// }
 					nextFeet[ii] = h.homeFootPosition(h.Legs[ii], o)
 				}
 
@@ -294,11 +324,13 @@ func (h *Hexapod) MainLoop() {
 				}
 
 			} else if (h.stateCounter >= 2) {
-				h.SetState(sStepUp)
 				sLegsIndex += 1
 
 				if sLegsIndex >= len(legSets) {
+					h.SetState(sStand)
 					sLegsIndex = 0
+				} else {
+					h.SetState(sStepUp)
 				}
 			}
 
@@ -390,11 +422,11 @@ func (h *Hexapod) CrapRotate() {
 		mov = Point3d{0, 0, 0}
 
 		if h.Controller.L {
-			rot = 20
+			h.CurrentRotation += -10
 		}
 
 		if h.Controller.R {
-			rot = -20
+			h.CurrentRotation += -10
 		}
 
 		if h.Controller.Up {
