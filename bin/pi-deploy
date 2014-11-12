@@ -22,5 +22,5 @@ rsync -p $TMP $USER@$HOST:$DEST || exit 1
 rm $TMP
 
 echo
-echo "# running"
-ssh -t $USER@$HOST "$DEST --port=/dev/ttyACM0 $@" || exit 1
+echo "# restarting"
+ssh -t $USER@$HOST "systemctl restart bot" || exit 1

@@ -32,6 +32,9 @@ type Hexapod struct {
 	State           State
 	stateCounter    int
 
+	// Set to true if the hexapod should shut down ASAP
+	Halt            bool
+
 	// ???
 	TargetPosition  Point3d
 	TargetRotation  float64
@@ -149,8 +152,8 @@ func (h *Hexapod) homeFootPosition(leg *Leg, o Point3d) *Point3d {
 }
 
 // MainLoop watches for changes to the target position and rotation, and tries
-// to apply it as gracefully as possible.
-func (h *Hexapod) MainLoop() {
+// to apply it as gracefully as possible. Returns an exit code.
+func (h *Hexapod) MainLoop() int {
 	h.setMoveSpeed(256)
 
 	// Shorthand
@@ -237,9 +240,13 @@ func (h *Hexapod) MainLoop() {
 
 		// At any time, pressing select terminates. (Do this rather than using INT,
 		// to turn off the servos.)
-		if h.Controller.Select {
+		if h.Controller.Start || h.Halt {
 			h.Relax()
-			return
+			if h.Controller.Select {
+				return 1
+			} else {
+				return 0
+			}
 		}
 
 		switch h.State {
@@ -336,7 +343,7 @@ func (h *Hexapod) MainLoop() {
 
 		default:
 			fmt.Println("unknown state!")
-			return
+			return 0
 		}
 
 		// Update the position of each foot

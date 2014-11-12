@@ -4,6 +4,9 @@ import (
   "flag"
   "fmt"
   "os"
+  "os/signal"
+  "syscall"
+  "os/exec"
   "github.com/adammck/hexapod"
   "github.com/adammck/retroport"
 )
@@ -33,7 +36,27 @@ func main() {
   h.Controller = retroport.MakeSNES(f)
   go h.Controller.Run()
 
-  // start rotating!
-  h.MainLoop()
-  os.Exit(0)
+  // Catch both SIGINT (ctrl+c) and SIGTERM (kill/systemd), to allow the hexapod
+  // to power down its servos before exiting.
+  c := make(chan os.Signal, 1)
+  signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+  go func() {
+    for _ = range c {
+      fmt.Println("Halting")
+      h.Halt = true
+    }
+  }()
+
+  // Run until START (bounce service) or SELECT+START (poweroff).
+  code := h.MainLoop()
+  if code == 1 {
+    fmt.Println("Shutting down")
+    cmd := exec.Command("poweroff")
+    err := cmd.Run()
+    if err != nil {
+      fmt.Println(err)
+    }
+  }
+
+  os.Exit(code)
 }
