@@ -67,16 +67,9 @@ func NewHexapod(network *dynamixel.DynamixelNetwork) *Hexapod {
 	}
 }
 
-//
 // NewHexapodFromPortName creates a new Hexapod object by opening the given
 // serial port with the default options. This only exists to reduce boilerplate
 // in my development utils.
-//
-// Note: This only works with OSX for the time being, because the upstream
-//       serial port library (jacobsa/go-serial), while being otherwise super,
-//       only supports OSX. There are other serial port libraries which support
-//       Linux and Windows, but you'll have to instantiate those yourself.
-//
 func NewHexapodFromPortName(portName string) (*Hexapod, error) {
 	options := serial.OpenOptions{
 		PortName:              portName,
