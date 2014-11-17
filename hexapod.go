@@ -9,15 +9,17 @@ import (
 	"time"
 )
 
-type State int
+type State string
 
 const (
-	sInit     State = iota
-	sStandUp  State = iota
-	sStand    State = iota
-	sStepUp   State = iota
-	sStepOver State = iota
-	sStepDown State = iota
+	sInit     State = "sInit"
+	sHalt     State = "sHalt"
+	sStandUp  State = "sStandUp"
+	sSitDown  State = "sSitDown"
+	sStand    State = "sStand"
+	sStepUp   State = "sStepUp"
+	sStepOver State = "sStepOver"
+	sStepDown State = "sStepDown"
 )
 
 type Hexapod struct {
@@ -86,11 +88,17 @@ func NewHexapodFromPortName(portName string) (*Hexapod, error) {
 	}
 
 	network := dynamixel.NewNetwork(serial)
+	flushErr := network.Flush()
+	if flushErr != nil {
+		return nil, flushErr
+	}
+
 	hexapod := NewHexapod(network)
 	return hexapod, nil
 }
 
 func (h *Hexapod) SetState(s State) {
+	fmt.Printf("State=%s\n", s)
 	h.stateCounter = 0
 	h.State = s
 }
@@ -106,11 +114,6 @@ func (hexapod *Hexapod) Sync(f func()) {
 	hexapod.Network.Action()
 }
 
-func (hexapod *Hexapod) SyncWait(f func(), ms int) {
-	hexapod.Sync(f)
-	time.Sleep(time.Duration(ms) * time.Millisecond)
-}
-
 //
 // SyncLegs runs the given function once for each leg while the network is in
 // buffered mode, then initiates movements with ACTION. This is useful when
@@ -122,17 +125,6 @@ func (hexapod *Hexapod) SyncLegs(f func(leg *Leg)) {
 			f(leg)
 		}
 	})
-}
-
-// setMoveSpeed sets the moving speed of all servos. This is only really useful
-// for testing and debugging.
-func (hexapod *Hexapod) setMoveSpeed(speed int) {
-	for _, leg := range hexapod.Legs {
-		for _, servo := range leg.Servos() {
-			servo.SetTorqueEnable(true)
-			servo.SetMovingSpeed(speed)
-		}
-	}
 }
 
 func (h *Hexapod) homeFootPosition(leg *Leg, o Point3d) *Point3d {
@@ -147,7 +139,6 @@ func (h *Hexapod) homeFootPosition(leg *Leg, o Point3d) *Point3d {
 // MainLoop watches for changes to the target position and rotation, and tries
 // to apply it as gracefully as possible. Returns an exit code.
 func (h *Hexapod) MainLoop() int {
-	h.setMoveSpeed(256)
 
 	// Shorthand
 	o := h.CurrentPosition
@@ -157,9 +148,14 @@ func (h *Hexapod) MainLoop() int {
 	h.State = sInit
 
 	// settings
-	mov := 5.0
+	mov := 2.0
 	footUp := -40.0
 	footDown := -80.0
+	minStepDistance := 30.0
+	initCount := 10
+	stepUpCount := 2
+	stepOverCount := 2
+	stepDownCount := 2
 
 	// World foot positions
 	feet := [6]*Point3d{
@@ -193,6 +189,8 @@ func (h *Hexapod) MainLoop() int {
 	sLegsIndex := 0
 
 	for {
+		h.stateCounter += 1
+		//fmt.Printf("State=%s[%d]\n", h.State, h.stateCounter)
 
 		if h.Controller.Up {
 			o.Z += mov
@@ -211,11 +209,11 @@ func (h *Hexapod) MainLoop() int {
 		}
 
 		if h.Controller.L {
-			r -= 10
+			r -= mov
 		}
 
 		if h.Controller.R {
-			r += 10
+			r += mov
 		}
 
 		if h.Controller.Y {
@@ -226,36 +224,50 @@ func (h *Hexapod) MainLoop() int {
 			o.Y += mov
 		}
 
-		// if h.Controller.B {
-		// 	h.State = sStepUp
-		// 	sLegsIndex = 0
-		// }
-
-		// At any time, pressing select terminates. (Do this rather than using INT,
-		// to turn off the servos.)
+		// At any time, pressing select terminates. This can also be set from
+		// another goroutine, to handle e.g. SIGTERM.
 		if h.Controller.Start || h.Halt {
-			h.Relax()
-			if h.Controller.Select {
-				return 1
-			} else {
-				return 0
+			if h.State != sSitDown && h.State != sHalt {
+				h.SetState(sSitDown)
 			}
 		}
 
 		switch h.State {
 		case sInit:
 
+			// Initialize each servo
+			if h.stateCounter == 1 {
+				for _, leg := range h.Legs {
+					for _, servo := range leg.Servos() {
+						servo.SetStatusReturnLevel(1)
+						servo.SetTorqueEnable(true)
+						servo.SetMovingSpeed(512)
+					}
+				}
+			}
+
 			// Pause at this state for a while, then stand up.
-			if h.stateCounter >= 20 {
+			if h.stateCounter >= initCount {
 				h.SetState(sStandUp)
 			}
+
+		case sHalt:
+			for _, leg := range h.Legs {
+				for _, servo := range leg.Servos() {
+					servo.SetStatusReturnLevel(2)
+					servo.SetTorqueEnable(false)
+					servo.SetLed(false)
+				}
+			}
+
+			return 0
 
 		// After initializing, push the feet downloads to lift the hex off the
 		// ground. This is to reduce torque on the joints when moving into the
 		// initial stance.
 		case sStandUp:
 			for _, foot := range feet {
-				foot.Y -= 5
+				foot.Y -= 2
 			}
 
 			// Once we've stood up, advance to the walking state.
@@ -263,10 +275,18 @@ func (h *Hexapod) MainLoop() int {
 				h.SetState(sStand)
 			}
 
+		case sSitDown:
+			for _, foot := range feet {
+				foot.Y += 2
+			}
+
+			if feet[0].Y >= footUp {
+				h.SetState(sHalt)
+			}
+
 		// TODO: Move feet back to home positions when standing!
 		case sStand:
 			needsMove := false
-			minStepDistance := mov * 2
 
 			for i, _ := range h.Legs {
 				a := h.homeFootPosition(h.Legs[i], o)
@@ -281,49 +301,46 @@ func (h *Hexapod) MainLoop() int {
 			}
 
 		case sStepUp:
-			if(h.stateCounter == 1) {
-				//fmt.Println(sLegsIndex, legSets[sLegsIndex])
+			if h.stateCounter == 1 {
 				for _, ii := range legSets[sLegsIndex] {
 					h.Legs[ii].SetLED(true)
 					feet[ii].Y = footUp
 				}
+			}
 
 			// TODO: Project the next step position, rather than just moving it home
 			//       every time. This will half (!!) the number of steps to move in a
 			//       constant direciton.
-			}// else if (h.stateCounter >= 2) {
+			if h.stateCounter >= stepUpCount {
 				for _, ii := range legSets[sLegsIndex] {
-					// home := h.homeFootPosition(h.Legs[ii], o)
-					// nextFeet[ii] = &Point3d{
-					// 	X: home.X - (feet[ii].X - home.X),
-					// 	Z: home.Z - (feet[ii].Z - home.Z),
-					// 	Y: home.Y,
-					// }
 					nextFeet[ii] = h.homeFootPosition(h.Legs[ii], o)
 				}
 
 				h.SetState(sStepOver)
-			//}
+			}
 
 		case sStepOver:
-			if(h.stateCounter == 1) {
+			if h.stateCounter == 1 {
 				for _, ii := range legSets[sLegsIndex] {
 					feet[ii].X = nextFeet[ii].X
 					feet[ii].Z = nextFeet[ii].Z
 				}
 
-			}// else if (h.stateCounter >= 2) {
+			}
+
+			if h.stateCounter >= stepOverCount {
 				h.SetState(sStepDown)
-			//}
+			}
 
 		case sStepDown:
-			if(h.stateCounter == 1) {
+			if h.stateCounter == 1 {
 				for _, ii := range legSets[sLegsIndex] {
 					h.Legs[ii].SetLED(false)
 					feet[ii].Y = footDown
 				}
+			}
 
-			} else if (h.stateCounter >= 2) {
+			if h.stateCounter >= stepDownCount {
 				sLegsIndex += 1
 
 				if sLegsIndex >= len(legSets) {
@@ -347,184 +364,7 @@ func (h *Hexapod) MainLoop() int {
 			}
 		})
 
-		h.stateCounter += 1
-		time.Sleep(10 * time.Millisecond)
-	}
-}
-
-// Rotate just rotates the hexapod in a counter-clockwise circle forever.
-func (h *Hexapod) CrapRotate() {
-	h.setMoveSpeed(256)
-
-	// settings
-	footDown := -100.0
-	footUp := -60.0
-	sleep := 100
-	stepSize := 50.0
-
-	// controls
-	up := false
-	rot := 0.0
-	mov := Point3d{}
-	quit := false
-
-	// state
-	isUp := false
-
-	// move legs in groups of two, for stability
-	legSets := [][]int{
-		[]int{0, 3},
-		[]int{1, 4},
-		[]int{2, 5},
-	}
-
-	// or three, for maximum speed
-	// legSets := [][]int{
-	// 	[]int{0, 2, 4},
-	// 	[]int{1, 3, 5},
-	// }
-
-	footPos := func(debug bool, leg *Leg, angle float64, movX float64, movZ float64, altitude float64) Point3d {
-		r := rad(leg.Angle - angle)
-
-		x := math.Cos(r) * h.StepRadius
-		z := math.Sin(r) * h.StepRadius
-		p := Point3d{x, altitude, -z}
-
-		if debug {
-			// opp := (x+movX)-leg.Origin.X
-			// adj := (-z+movZ) - leg.Origin.Z
-			// theta := math.Atan2(-opp, adj)
-			fmt.Printf("%s: %+0.4f,%+0.4f -> %+0.4f,%+0.4f -> %+0.4f,%+0.4f\n", leg.Name, leg.Origin.X, leg.Origin.Z, x, -z, x+movX, (-z)+movZ)
-			//fmt.Printf("%s: adj=%0.4f, opp=%0.4f, theta=%0.4f\n", leg.Name, opp, adj, theta)
-		}
-
-		return p
-	}
-
-	setFoot := func(debug bool, leg *Leg, angle float64, movX float64, movZ float64, altitude float64) {
-		leg.SetGoal(footPos(debug, leg, angle, movX, movZ, altitude))
-	}
-
-	setFeet := func(debug bool, i int, angle float64, movX float64, movZ float64, altitude float64) {
-		for _, ii := range legSets[i] {
-			setFoot(debug, h.Legs[ii], angle, movX, movZ, altitude)
-		}
-	}
-
-	// main loop!
-
-	for {
-
-		// READ STATE
-
-		rot = 0
-		mov = Point3d{0, 0, 0}
-
-		if h.Controller.L {
-			h.CurrentRotation += -10
-		}
-
-		if h.Controller.R {
-			h.CurrentRotation += -10
-		}
-
-		if h.Controller.Up {
-			mov.Z = stepSize
-		}
-
-		if h.Controller.Down {
-			mov.Z = -stepSize
-		}
-
-		if h.Controller.Left {
-			mov.X = -stepSize
-		}
-
-		if h.Controller.Right {
-			mov.X = stepSize
-		}
-
-		// Lower body
-		if h.Controller.Y {
-			footDown += 10
-			isUp = false
-		}
-
-		// Raise body
-		if h.Controller.X {
-			footDown -= 10
-			isUp = false
-		}
-
-		// toggle active state
-		if h.Controller.Start {
-			up = !up
-		}
-
-		// quit
-		if h.Controller.Select {
-			up = false
-			quit = true
-		}
-
-		// MOVE
-
-		// stand up
-		if up && !isUp {
-			h.SyncWait(func() {
-				for _, leg := range h.Legs {
-					setFoot(false, leg, 0, 0, 0, footDown)
-				}
-			}, 100)
-			isUp = true
-
-			// sit down
-		} else if !up && isUp {
-			h.SyncWait(func() {
-				for _, leg := range h.Legs {
-					setFoot(false, leg, 0, 0, 0, footUp)
-				}
-			}, 1000)
-			isUp = false
-		}
-
-		if !quit && isUp && (rot != 0 || mov.X != 0 || mov.Z != 0) {
-			for i, _ := range legSets {
-
-				// three-step:
-				// * raise the foot
-				// * move to the target offset
-				// * lower the foot
-				h.SyncWait(func() { setFeet(false, i, 0, 0, 0, footUp) }, sleep)
-				h.SyncWait(func() { setFeet(false, i, rot, mov.X, mov.Z, footUp) }, sleep)
-				h.SyncWait(func() { setFeet(false, i, rot, mov.X, mov.Z, footDown) }, sleep)
-				//h.SyncWait(func() { setFeet(false, i, 0, 0, 0, footUp) }, sleep)
-				//h.SyncWait(func() { setFeet(false, i, 0, 0, 0, footDown) }, sleep)
-
-				// two-step:
-				// h.SyncWait(func() { setFeet(i, rot*0.5, footUp) }, sleep)
-				// h.SyncWait(func() { setFeet(i, rot, footDown) }, sleep)
-			}
-
-			time.Sleep(50 * time.Millisecond)
-
-			// untwist
-			h.SyncWait(func() {
-				for _, leg := range h.Legs {
-					setFoot(false, leg, 0, 0, 0, footDown)
-				}
-			}, sleep)
-
-			// yield if there's nothing to do
-		} else {
-			time.Sleep(20 * time.Millisecond)
-		}
-
-		if quit {
-			h.Relax()
-			return
-		}
+		time.Sleep(1 * time.Millisecond)
 	}
 }
 

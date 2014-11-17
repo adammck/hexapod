@@ -73,5 +73,6 @@ func main() {
     pprof.StopCPUProfile()
   }
 
+  fmt.Printf("Exit(%d)\n", code)
   os.Exit(code)
 }
