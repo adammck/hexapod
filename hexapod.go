@@ -27,7 +27,7 @@ type Hexapod struct {
 	Controller *retroport.SNES
 
 	// The world coordinates of the center of the hexapod.
-	CurrentPosition Point3d
+	CurrentPosition Vector3
 	CurrentRotation float64
 
 	// The state that the hexapod is currently in.
@@ -38,7 +38,7 @@ type Hexapod struct {
 	Halt            bool
 
 	// ???
-	TargetPosition  Point3d
+	TargetPosition  Vector3
 	TargetRotation  float64
 	StepRadius      float64
 	Legs            [6]*Leg
@@ -50,8 +50,8 @@ type Hexapod struct {
 func NewHexapod(network *dynamixel.DynamixelNetwork) *Hexapod {
 	return &Hexapod{
 		Network:         network,
-		CurrentPosition: Point3d{0, 0, 0},
-		TargetPosition:  Point3d{0, 0, 0},
+		CurrentPosition: Vector3{0, 0, 0},
+		TargetPosition:  Vector3{0, 0, 0},
 		CurrentRotation: 0.0,
 		TargetRotation:  0.0,
 		StepRadius:      220,
@@ -59,12 +59,12 @@ func NewHexapod(network *dynamixel.DynamixelNetwork) *Hexapod {
 
 			// Points are the X/Y/Z offsets from the center of the top of the body to
 			// the center of the coxa pivots.
-			NewLeg(network, 10, "FL", NewPoint(-51.1769, -19, 98), -120), // Front Left  - 0
-			NewLeg(network, 20, "FR", NewPoint(51.1769, -19, 98), -60),   // Front Right - 1
-			NewLeg(network, 30, "MR", NewPoint(66, -19, 0), 0),           // Mid Right   - 2
-			NewLeg(network, 40, "BR", NewPoint(51.1769, -19, -98), 60),   // Back Right  - 3
-			NewLeg(network, 50, "BL", NewPoint(-51.1769, -19, -98), 120), // Back Left   - 4
-			NewLeg(network, 60, "ML", NewPoint(-66, -19, 0), 180),        // Mid Left    - 5
+			NewLeg(network, 10, "FL", MakeVector3(-51.1769, -19, 98), -120), // Front Left  - 0
+			NewLeg(network, 20, "FR", MakeVector3(51.1769, -19, 98), -60),   // Front Right - 1
+			NewLeg(network, 30, "MR", MakeVector3(66, -19, 0), 0),           // Mid Right   - 2
+			NewLeg(network, 40, "BR", MakeVector3(51.1769, -19, -98), 60),   // Back Right  - 3
+			NewLeg(network, 50, "BL", MakeVector3(-51.1769, -19, -98), 120), // Back Left   - 4
+			NewLeg(network, 60, "ML", MakeVector3(-66, -19, 0), 180),        // Mid Left    - 5
 		},
 	}
 }
@@ -127,13 +127,13 @@ func (hexapod *Hexapod) SyncLegs(f func(leg *Leg)) {
 	})
 }
 
-func (h *Hexapod) homeFootPosition(leg *Leg, o Point3d) *Point3d {
+func (h *Hexapod) homeFootPosition(leg *Leg, o Vector3) *Vector3 {
 	//o := h.CurrentPosition
 	r := rad(leg.Angle)
 	//r := rad(leg.Angle - angle)
 	x := math.Cos(r) * h.StepRadius
 	z := -math.Sin(r) * h.StepRadius
-	return &Point3d{o.X + x, o.Y - 20, o.Z + z}
+	return &Vector3{o.X + x, o.Y - 20, o.Z + z}
 }
 
 // MainLoop watches for changes to the target position and rotation, and tries
@@ -142,23 +142,24 @@ func (h *Hexapod) MainLoop() int {
 
 	// Shorthand
 	o := h.CurrentPosition
-	r := h.CurrentRotation
 
 	// Initial state
 	h.State = sInit
 
 	// settings
+	legSetSize := 2
+	sleepTime := 20 * time.Millisecond
 	mov := 2.0
 	footUp := -40.0
 	footDown := -80.0
-	minStepDistance := 30.0
+	minStepDistance := 20.0
 	initCount := 10
-	stepUpCount := 2
-	stepOverCount := 2
-	stepDownCount := 2
+	stepUpCount := 3
+	stepOverCount := 3
+	stepDownCount := 3
 
 	// World foot positions
-	feet := [6]*Point3d{
+	feet := [6]*Vector3{
 		h.homeFootPosition(h.Legs[0], o),
 		h.homeFootPosition(h.Legs[1], o),
 		h.homeFootPosition(h.Legs[2], o),
@@ -169,7 +170,7 @@ func (h *Hexapod) MainLoop() int {
 
 	// World positions of the NEXT foot position. These are nil if we're okay with
 	// where the foot is now, but are set when the foot should be relocated.
-	nextFeet := [6]*Point3d{
+	nextFeet := [6]*Vector3{
 		nil,
 		nil,
 		nil,
@@ -178,12 +179,33 @@ func (h *Hexapod) MainLoop() int {
 		nil,
 	}
 
- 	// move legs in groups of two, for stability
-	legSets := [][]int{
-		[]int{0, 3},
-		[]int{1, 4},
-		[]int{2, 5},
+	var legSets [][]int
+	switch legSetSize {
+	case 1:
+		legSets = [][]int{
+			[]int{0},
+			[]int{1},
+			[]int{2},
+			[]int{3},
+			[]int{4},
+			[]int{5},
+		}
+	case 2:
+		legSets = [][]int{
+			[]int{0, 3},
+			[]int{1, 4},
+			[]int{2, 5},
+		}
+	case 3:
+		legSets = [][]int{
+			[]int{0, 2, 4},
+			[]int{1, 3, 5},
+		}
+	default:
+		fmt.Println("invalid legSetSize!")
+		return 0
 	}
+
 
 	// Which legset are we currently stepping?
 	sLegsIndex := 0
@@ -209,11 +231,11 @@ func (h *Hexapod) MainLoop() int {
 		}
 
 		if h.Controller.L {
-			r -= mov
+			h.CurrentRotation -= 1.0
 		}
 
 		if h.Controller.R {
-			r += mov
+			h.CurrentRotation += 1.0
 		}
 
 		if h.Controller.Y {
@@ -241,7 +263,7 @@ func (h *Hexapod) MainLoop() int {
 					for _, servo := range leg.Servos() {
 						servo.SetStatusReturnLevel(1)
 						servo.SetTorqueEnable(true)
-						servo.SetMovingSpeed(512)
+						servo.SetMovingSpeed(128)
 					}
 				}
 			}
@@ -359,12 +381,12 @@ func (h *Hexapod) MainLoop() int {
 		// Update the position of each foot
 		h.Sync(func() {
 			for i, leg := range h.Legs {
-				pp := Point3d{feet[i].X - o.X, feet[i].Y - o.Y, feet[i].Z - o.Z}
+				pp := Vector3{feet[i].X - o.X, feet[i].Y - o.Y, feet[i].Z - o.Z}
 				leg.SetGoal(pp)
 			}
 		})
 
-		time.Sleep(1 * time.Millisecond)
+		time.Sleep(sleepTime)
 	}
 }
 

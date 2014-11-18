@@ -3,12 +3,11 @@ package hexapod
 import (
 	"fmt"
 	"github.com/adammck/dynamixel"
-	"github.com/adammck/ik"
 	"math"
 )
 
 type Leg struct {
-	Origin *Point3d
+	Origin *Vector3
 	Angle  float64
 	Name   string
 	Coxa   *dynamixel.DynamixelServo
@@ -17,7 +16,7 @@ type Leg struct {
 	Tarsus *dynamixel.DynamixelServo
 }
 
-func NewLeg(network *dynamixel.DynamixelNetwork, baseId int, name string, origin *Point3d, angle float64) *Leg {
+func NewLeg(network *dynamixel.DynamixelNetwork, baseId int, name string, origin *Vector3, angle float64) *Leg {
 	return &Leg{
 		Origin: origin,
 		Angle:  angle,
@@ -47,7 +46,7 @@ func (leg *Leg) SetLED(state bool) {
 
 // calculateCoxaAngle calculates the angle (in degrees) which the coxa should be
 // set to, for the target vector to be reachable.
-func (leg *Leg) calculateCoxaAngle(v ik.Vector3) float64 {
+func (leg *Leg) calculateCoxaAngle(v Vector3) float64 {
 	x := v.X - leg.Origin.X
 	z := v.Z - leg.Origin.Z
 	theta := deg(math.Atan2(-z, x))
@@ -59,19 +58,19 @@ func _sss(a float64, b float64, c float64) float64 {
 	return deg(math.Acos(((b * b) + (c * c) - (a * a)) / (2 * b * c)))
 }
 
-func (leg *Leg) segments() (*ik.Segment, *ik.Segment, *ik.Segment, *ik.Segment) {
+func (leg *Leg) segments() (*Segment, *Segment, *Segment, *Segment) {
 
 	// The position of the object in space must be specified by two segments. The
 	// first positions it, then the second (which is always zero-length) rotates
 	// it into the home orientation.
-	r1 := ik.MakeRootSegment(*ik.MakeVector3(leg.Origin.X, leg.Origin.Y, leg.Origin.Z))
-	r2 := ik.MakeSegment("r2", r1, *ik.MakePair(ik.RotationHeading, leg.Angle, leg.Angle), *ik.MakeVector3(0, 0, 0))
+	r1 := MakeRootSegment(*MakeVector3(leg.Origin.X, leg.Origin.Y, leg.Origin.Z))
+	r2 := MakeSegment("r2", r1, *MakePair(RotationHeading, leg.Angle, leg.Angle), *MakeVector3(0, 0, 0))
 
 	// Movable segments (angles in deg, vectors in mm)
-	coxa := ik.MakeSegment("coxa", r2, *ik.MakePair(ik.RotationHeading, 40, -40), *ik.MakeVector3(39, -12, 0))
-	femur := ik.MakeSegment("femur", coxa, *ik.MakePair(ik.RotationBank, 90, 0), *ik.MakeVector3(100, 0, 0))
-	tibia := ik.MakeSegment("tibia", femur, *ik.MakePair(ik.RotationBank, 0, -135), *ik.MakeVector3(85, 0, 0))
-	tarsus := ik.MakeSegment("tarsus", tibia, *ik.MakePair(ik.RotationBank, 90, -90), *ik.MakeVector3(76.5, 0, 0))
+	coxa := MakeSegment("coxa", r2, *MakePair(RotationHeading, 40, -40), *MakeVector3(39, -12, 0))
+	femur := MakeSegment("femur", coxa, *MakePair(RotationBank, 90, 0), *MakeVector3(100, 0, 0))
+	tibia := MakeSegment("tibia", femur, *MakePair(RotationBank, 0, -135), *MakeVector3(85, 0, 0))
+	tarsus := MakeSegment("tarsus", tibia, *MakePair(RotationBank, 90, -90), *MakeVector3(76.5, 0, 0))
 
 	// Return just the useful segments
 	return coxa, femur, tibia, tarsus
@@ -79,11 +78,11 @@ func (leg *Leg) segments() (*ik.Segment, *ik.Segment, *ik.Segment, *ik.Segment) 
 
 // Sets the goal position of this leg to the given x/y/z coordinates, relative
 // to the center of the hexapod.
-func (leg *Leg) SetGoal(p Point3d) {
+func (leg *Leg) SetGoal(p Vector3) {
 	_, femur, _, _ := leg.segments()
 
-	v := &ik.Vector3{p.X, p.Y, p.Z}
-	vv := v.Add(ik.Vector3{0, 64, 0})
+	v := &Vector3{p.X, p.Y, p.Z}
+	vv := v.Add(Vector3{0, 64, 0})
 
 	// Solve the angle of the coxa by looking at the position of the target from
 	// above (x,z). It's the only joint which rotates around the Y axis, so we can
