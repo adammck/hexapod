@@ -148,14 +148,14 @@ func (h *Hexapod) MainLoop() int {
 
 	// settings
 	legSetSize := 2
-	sleepTime := 20 * time.Millisecond
+	sleepTime := 10 * time.Millisecond
 	mov := 2.0
 	footUp := -40.0
 	footDown := -80.0
 	minStepDistance := 20.0
 	initCount := 10
-	stepUpCount := 3
-	stepOverCount := 3
+	stepUpCount := 2
+	stepOverCount := 2
 	stepDownCount := 3
 
 	// World foot positions
@@ -246,6 +246,10 @@ func (h *Hexapod) MainLoop() int {
 			o.Y += mov
 		}
 
+		if h.Controller.Start && h.Controller.Select {
+			return 1
+		}
+
 		// At any time, pressing select terminates. This can also be set from
 		// another goroutine, to handle e.g. SIGTERM.
 		if h.Controller.Start || h.Halt {
@@ -263,7 +267,7 @@ func (h *Hexapod) MainLoop() int {
 					for _, servo := range leg.Servos() {
 						servo.SetStatusReturnLevel(1)
 						servo.SetTorqueEnable(true)
-						servo.SetMovingSpeed(128)
+						servo.SetMovingSpeed(512)
 					}
 				}
 			}
