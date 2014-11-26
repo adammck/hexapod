@@ -14,8 +14,6 @@ This is the Go program which powers my crappy hexapod. I don't imagine that it's
 * [USB Super RetroPort] (http://www.retrousb.com/product_info.php?cPath=21&products_id=29)
 * [RioRand LM2596] (http://amzn.com/B008BHAOQO)
 
-Total build cost (excluding the printer), is about $800, many evenings and weekends, and repeatedly lacerated hands.
-
 
 ## Requirements
 
