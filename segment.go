@@ -5,31 +5,22 @@ import (
 )
 
 type Segment struct {
-	Name     string
-	parent   *Segment
-	Child    *Segment
-	Pair     Pair
-	Angle    EulerAngles
-	//eaStart  EulerAngles
-	//eaEnd    EulerAngles
-	vec      Vector3
-	locked   bool
-	eaLock   EulerAngles
+	Name   string
+	parent *Segment
+	Child  *Segment
+	Pair   Pair
+	Angle  EulerAngles
+	vec    Vector3
 }
 
 func MakeSegment(name string, parent *Segment, pair Pair, vec Vector3) *Segment {
 
-	//eaStart := pair.one
-	//eaEnd := pair.two
-
 	s := &Segment{
-		Name:    name,
-		parent:  parent,
-		Pair:    pair,
-		Angle:   pair.one,
-		//eaStart: eaStart,
-		//eaEnd:   eaEnd,
-		vec:     vec,
+		Name:   name,
+		parent: parent,
+		Pair:   pair,
+		Angle:  pair.one,
+		vec:    vec,
 	}
 
 	if parent != nil {
@@ -53,67 +44,6 @@ func (s Segment) String() string {
 	}
 
 	return fmt.Sprintf("&Seg{%s: %s %s}", s.Name, s.Angle, childStr)
-}
-
-
-
-func (s *Segment) Clone() *Segment {
-
-	var c *Segment
-	if s.Child != nil {
-		c = s.Child.Clone()
-	}
-
-	ss := &Segment{
-		Name:    s.Name,
-		parent:  s.parent,
-		Child:   c,
-		Pair:    s.Pair,
-		Angle:   s.Angle,
-		vec:     s.vec,
-		locked:  s.locked,
-		eaLock:  s.eaLock,
-	}
-
-	if c != nil {
-		c.parent = ss
-	}
-
-	return ss
-}
-
-func (s *Segment) EulerAngles(resolution float64) []EulerAngles {
-	if s.locked {
-		return []EulerAngles{s.eaLock}
-	}
-
-	return s.Pair.EulerAngles(resolution)
-}
-
-
-
-// func (s *Segment) Range(step float64) []EulerAngles {
-//   if(s.locked) {
-//     ea = append(ea, s.eaLock)
-//     return ea
-//   }
-// }
-
-func (s *Segment) LockRotation(ea EulerAngles) {
-	s.Angle = ea
-	s.eaLock = ea
-	s.locked = true
-}
-
-func (s *Segment) Unlock() {
-	s.Angle = IdentityOrientation
-	s.eaLock = IdentityOrientation
-	s.locked = false
-}
-
-// TODO: GTFO, do this in range, don't mutate it from outside.
-func (s *Segment) SetRotation(r EulerAngles) {
-	s.Angle = r
 }
 
 // Start returns a vector3 with the coordinates of the start of this segment, in

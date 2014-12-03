@@ -31,17 +31,17 @@ type Hexapod struct {
 	CurrentRotation float64
 
 	// The state that the hexapod is currently in.
-	State           State
-	stateCounter    int
+	State        State
+	stateCounter int
 
 	// Set to true if the hexapod should shut down ASAP
-	Halt            bool
+	Halt bool
 
 	// ???
-	TargetPosition  Vector3
-	TargetRotation  float64
-	StepRadius      float64
-	Legs            [6]*Leg
+	TargetPosition Vector3
+	TargetRotation float64
+	StepRadius     float64
+	Legs           [6]*Leg
 }
 
 //
@@ -205,7 +205,6 @@ func (h *Hexapod) MainLoop() int {
 		fmt.Println("invalid legSetSize!")
 		return 0
 	}
-
 
 	// Which legset are we currently stepping?
 	sLegsIndex := 0
@@ -414,7 +413,7 @@ func (hexapod *Hexapod) Shutdown() {
 	})
 
 	// TODO: Wait for servos to stop moving, instead of hard-coding a timer.
-	wait(2000)
+	time.Sleep(2000 * time.Millisecond)
 	hexapod.Relax()
 }
 
@@ -425,17 +424,4 @@ func (hexapod *Hexapod) Relax() {
 			servo.SetLed(false)
 		}
 	}
-}
-
-func wait(ms int) {
-	time.Sleep(time.Duration(ms) * time.Millisecond)
-}
-
-func (hexapod *Hexapod) setLegs(c float64, f float64, t float64, tt float64) {
-	hexapod.SyncLegs(func(leg *Leg) {
-		leg.Coxa.MoveTo(c)
-		leg.Femur.MoveTo(f)
-		leg.Tibia.MoveTo(t)
-		leg.Tarsus.MoveTo(tt)
-	})
 }

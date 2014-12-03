@@ -44,15 +44,6 @@ func (leg *Leg) SetLED(state bool) {
 	}
 }
 
-// calculateCoxaAngle calculates the angle (in degrees) which the coxa should be
-// set to, for the target vector to be reachable.
-func (leg *Leg) calculateCoxaAngle(v Vector3) float64 {
-	x := v.X - leg.Origin.X
-	z := v.Z - leg.Origin.Z
-	theta := deg(math.Atan2(-z, x))
-	return 0 - (leg.Angle - theta)
-}
-
 // http://en.wikipedia.org/wiki/Solution_of_triangles#Three_sides_given_.28SSS.29
 func _sss(a float64, b float64, c float64) float64 {
 	return deg(math.Acos(((b * b) + (c * c) - (a * a)) / (2 * b * c)))
@@ -119,11 +110,6 @@ func (leg *Leg) SetGoal(p Vector3) {
 	femurAngle := (aa + bb + cc) - 90
 	tibiaAngle := 180 - hh
 	tarsusAngle := 180 - (dd + ee)
-
-	//coxa.Angle = *ik.MakeSingularEulerAngle(ik.RotationHeading, 0 - coxaAngle)
-	//femur.Angle = *ik.MakeSingularEulerAngle(ik.RotationBank, 0 - femurAngle)
-	//tibia.Angle = *ik.MakeSingularEulerAngle(ik.RotationBank, 0 - tibiaAngle)
-	//tarsus.Angle = *ik.MakeSingularEulerAngle(ik.RotationBank, 0 - tarsusAngle)
 
 	// fmt.Printf("v=%v, vv=%v, r=%v, t=%v\n", v, vv, r, t)
 	// fmt.Printf("a=%0.4f, b=%0.4f, c=%0.4f, d=%0.4f, e=%0.4f, f=%0.4f, g=%0.4f\n", a, b, c, d, e, f, g)

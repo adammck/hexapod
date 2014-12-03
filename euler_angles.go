@@ -22,22 +22,22 @@ func Euler(h float64, p float64, b float64) EulerAngles {
 }
 
 func MakeSingularEulerAngle(rot rotation, angle float64) *EulerAngles {
-  ea := &EulerAngles{}
+	ea := &EulerAngles{}
 
-  switch rot {
-  case RotationHeading:
-    ea.Heading = rad(angle)
+	switch rot {
+	case RotationHeading:
+		ea.Heading = rad(angle)
 
-  case RotationPitch:
-    ea.Pitch = rad(angle)
+	case RotationPitch:
+		ea.Pitch = rad(angle)
 
-  case RotationBank:
-    ea.Bank = rad(angle)
+	case RotationBank:
+		ea.Bank = rad(angle)
 
-  default:
-    panic("invalid rotation")
-  }
-  return ea
+	default:
+		panic("invalid rotation")
+	}
+	return ea
 }
 
 // TODO: GTFO?
