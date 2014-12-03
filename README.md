@@ -22,9 +22,9 @@ The hexapod's hostname must be `hexapod`.
 
 ## Usage
 
-To deploy and run an arbitrary package:
+To build and deploy a release:
 
-    bin/pi-run utils/xmas.go
+    bin/pi-deploy main/bot.go
 
 To power down:
 
