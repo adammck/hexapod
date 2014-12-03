@@ -2,7 +2,6 @@ package hexapod
 
 import (
 	"fmt"
-	//"math"
 )
 
 type EulerAngles struct {
@@ -13,13 +12,15 @@ type EulerAngles struct {
 
 type rotation int
 
+const (
+	RotationHeading rotation = iota
+	RotationPitch   rotation = iota
+	RotationBank    rotation = iota
+)
+
 var (
 	IdentityOrientation = EulerAngles{}
 )
-
-func Euler(h float64, p float64, b float64) EulerAngles {
-	return EulerAngles{rad(h), rad(p), rad(b)}
-}
 
 func MakeSingularEulerAngle(rot rotation, angle float64) *EulerAngles {
 	ea := &EulerAngles{}
@@ -37,6 +38,7 @@ func MakeSingularEulerAngle(rot rotation, angle float64) *EulerAngles {
 	default:
 		panic("invalid rotation")
 	}
+
 	return ea
 }
 

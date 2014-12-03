@@ -8,18 +8,16 @@ type Segment struct {
 	Name   string
 	parent *Segment
 	Child  *Segment
-	Pair   Pair
-	Angle  EulerAngles
+	Angles EulerAngles
 	vec    Vector3
 }
 
-func MakeSegment(name string, parent *Segment, pair Pair, vec Vector3) *Segment {
+func MakeSegment(name string, parent *Segment, angles EulerAngles, vec Vector3) *Segment {
 
 	s := &Segment{
 		Name:   name,
 		parent: parent,
-		Pair:   pair,
-		Angle:  pair.one,
+		Angles: angles,
 		vec:    vec,
 	}
 
@@ -31,7 +29,7 @@ func MakeSegment(name string, parent *Segment, pair Pair, vec Vector3) *Segment 
 }
 
 func MakeRootSegment(vec Vector3) *Segment {
-	return MakeSegment("root", nil, Pair{}, vec)
+	return MakeSegment("root", nil, EulerAngles{}, vec)
 }
 
 func (s Segment) String() string {
@@ -43,7 +41,7 @@ func (s Segment) String() string {
 		childStr = "nil"
 	}
 
-	return fmt.Sprintf("&Seg{%s: %s %s}", s.Name, s.Angle, childStr)
+	return fmt.Sprintf("&Seg{%s: %s %s}", s.Name, s.Angles, childStr)
 }
 
 // Start returns a vector3 with the coordinates of the start of this segment, in
@@ -66,13 +64,13 @@ func (s *Segment) WorldMatrix() *Matrix44 {
 	// that space, move by the vector (to the end of the segment), and rotate into
 	// this coordinate space.
 	if s.parent != nil {
-		m := MakeMatrix44(s.parent.vec, s.Angle)
+		m := MakeMatrix44(s.parent.vec, s.Angles)
 		return MultiplyMatrices(*m, *s.parent.WorldMatrix())
 
 		// no parent means that this is a root segment, so the origin is zero, and
 		// transformations only need an angle.
 	} else {
-		return MakeMatrix44(ZeroVector3, s.Angle)
+		return MakeMatrix44(ZeroVector3, s.Angles)
 	}
 }
 

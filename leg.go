@@ -55,13 +55,13 @@ func (leg *Leg) segments() (*Segment, *Segment, *Segment, *Segment) {
 	// first positions it, then the second (which is always zero-length) rotates
 	// it into the home orientation.
 	r1 := MakeRootSegment(*MakeVector3(leg.Origin.X, leg.Origin.Y, leg.Origin.Z))
-	r2 := MakeSegment("r2", r1, *MakePair(RotationHeading, leg.Angle, leg.Angle), *MakeVector3(0, 0, 0))
+	r2 := MakeSegment("r2", r1, *MakeSingularEulerAngle(RotationHeading, leg.Angle), *MakeVector3(0, 0, 0))
 
 	// Movable segments (angles in deg, vectors in mm)
-	coxa := MakeSegment("coxa", r2, *MakePair(RotationHeading, 40, -40), *MakeVector3(39, -12, 0))
-	femur := MakeSegment("femur", coxa, *MakePair(RotationBank, 90, 0), *MakeVector3(100, 0, 0))
-	tibia := MakeSegment("tibia", femur, *MakePair(RotationBank, 0, -135), *MakeVector3(85, 0, 0))
-	tarsus := MakeSegment("tarsus", tibia, *MakePair(RotationBank, 90, -90), *MakeVector3(76.5, 0, 0))
+	coxa := MakeSegment("coxa", r2, *MakeSingularEulerAngle(RotationHeading, 40), *MakeVector3(39, -12, 0))
+	femur := MakeSegment("femur", coxa, *MakeSingularEulerAngle(RotationBank, 90), *MakeVector3(100, 0, 0))
+	tibia := MakeSegment("tibia", femur, *MakeSingularEulerAngle(RotationBank, 0), *MakeVector3(85, 0, 0))
+	tarsus := MakeSegment("tarsus", tibia, *MakeSingularEulerAngle(RotationBank, 90), *MakeVector3(76.5, 0, 0))
 
 	// Return just the useful segments
 	return coxa, femur, tibia, tarsus
