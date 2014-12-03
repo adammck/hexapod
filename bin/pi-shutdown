@@ -1,5 +1,5 @@
-#!/bin/bash
-set -e
+#!/bin/bash -e
+cd $(cd `dirname "$0"`; cd ..; pwd)
 
 USER=pi
 HOST=hexapod

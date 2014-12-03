@@ -1,7 +1,6 @@
-#!/bin/bash
-set -e
+#!/bin/bash -e
+cd $(cd `dirname "$0"`; cd ..; pwd)
 
-cd $(git rev-parse --show-toplevel)
 USER=root
 HOST=hexapod
 TMP=/tmp/bot
