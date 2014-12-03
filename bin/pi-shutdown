@@ -1,6 +1,6 @@
 #!/bin/bash -e
 cd $(cd `dirname "$0"`; cd ..; pwd)
 
-USER=pi
+USER=root
 HOST=hexapod
 ssh -t $USER@$HOST "sudo shutdown -h now" || exit 1
