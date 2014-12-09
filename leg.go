@@ -8,7 +8,10 @@ import (
 
 type Leg struct {
 	Origin *Vector3
-	Angle  float64
+
+	// TODO: Rename this to 'Heading', since that's what it is
+	Angle float64
+
 	Name   string
 	Coxa   *dynamixel.DynamixelServo
 	Femur  *dynamixel.DynamixelServo
@@ -26,6 +29,12 @@ func NewLeg(network *dynamixel.DynamixelNetwork, baseId int, name string, origin
 		Tibia:  dynamixel.NewServo(network, uint8(baseId+3)),
 		Tarsus: dynamixel.NewServo(network, uint8(baseId+4)),
 	}
+}
+
+// Matrix returns a pointer to a 4x4 matrix, to transform a vector in the leg's
+// coordinate space into the parent (hexapod) space.
+func (leg *Leg) Matrix() Matrix44 {
+	return *MakeMatrix44(*leg.Origin, *MakeSingularEulerAngle(RotationHeading, leg.Angle))
 }
 
 // Servos returns an array of all servos attached to this leg.
