@@ -15,6 +15,7 @@ very good, but I've learned a lot while building and writing it. Here's a model:
 * [SparkFun USB MicroB Breakout] (https://www.sparkfun.com/products/10031)
 * [USB Super RetroPort] (http://www.retrousb.com/product_info.php?cPath=21&products_id=29)
 * [RioRand LM2596] (http://amzn.com/B008BHAOQO)
+* [Tiger 11.1v 2200mAh LiPo] (http://www.trossenrobotics.com/3s-11v-2200mah-25c-lipo-battery)
 * [Edimax EW-7811Un] (http://amzn.com/B003MTTJOY)
 
 
