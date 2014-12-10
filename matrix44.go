@@ -51,6 +51,34 @@ func (m Matrix44) Elements() [4][4]float64 {
 	}
 }
 
+// Inverse returns the inverse of the matrix.
+//
+// This implementation is stolen from threejs, because I don't fully understand
+// it yet. I was expecting it to be rather simpler.
+//
+// See: https://github.com/mrdoob/three.js/blob/master/src/math/Matrix4.js#L605
+//
+func (m Matrix44) Inverse() Matrix44 {
+	return Matrix44{
+		(m.m23 * m.m34 * m.m42) - (m.m24 * m.m33 * m.m42) + (m.m24 * m.m32 * m.m43) - (m.m22 * m.m34 * m.m43) - (m.m23 * m.m32 * m.m44) + (m.m22 * m.m33 * m.m44),
+		(m.m14 * m.m33 * m.m42) - (m.m13 * m.m34 * m.m42) - (m.m14 * m.m32 * m.m43) + (m.m12 * m.m34 * m.m43) + (m.m13 * m.m32 * m.m44) - (m.m12 * m.m33 * m.m44),
+		(m.m13 * m.m24 * m.m42) - (m.m14 * m.m23 * m.m42) + (m.m14 * m.m22 * m.m43) - (m.m12 * m.m24 * m.m43) - (m.m13 * m.m22 * m.m44) + (m.m12 * m.m23 * m.m44),
+		(m.m14 * m.m23 * m.m32) - (m.m13 * m.m24 * m.m32) - (m.m14 * m.m22 * m.m33) + (m.m12 * m.m24 * m.m33) + (m.m13 * m.m22 * m.m34) - (m.m12 * m.m23 * m.m34),
+		(m.m24 * m.m33 * m.m41) - (m.m23 * m.m34 * m.m41) - (m.m24 * m.m31 * m.m43) + (m.m21 * m.m34 * m.m43) + (m.m23 * m.m31 * m.m44) - (m.m21 * m.m33 * m.m44),
+		(m.m13 * m.m34 * m.m41) - (m.m14 * m.m33 * m.m41) + (m.m14 * m.m31 * m.m43) - (m.m11 * m.m34 * m.m43) - (m.m13 * m.m31 * m.m44) + (m.m11 * m.m33 * m.m44),
+		(m.m14 * m.m23 * m.m41) - (m.m13 * m.m24 * m.m41) - (m.m14 * m.m21 * m.m43) + (m.m11 * m.m24 * m.m43) + (m.m13 * m.m21 * m.m44) - (m.m11 * m.m23 * m.m44),
+		(m.m13 * m.m24 * m.m31) - (m.m14 * m.m23 * m.m31) + (m.m14 * m.m21 * m.m33) - (m.m11 * m.m24 * m.m33) - (m.m13 * m.m21 * m.m34) + (m.m11 * m.m23 * m.m34),
+		(m.m22 * m.m34 * m.m41) - (m.m24 * m.m32 * m.m41) + (m.m24 * m.m31 * m.m42) - (m.m21 * m.m34 * m.m42) - (m.m22 * m.m31 * m.m44) + (m.m21 * m.m32 * m.m44),
+		(m.m14 * m.m32 * m.m41) - (m.m12 * m.m34 * m.m41) - (m.m14 * m.m31 * m.m42) + (m.m11 * m.m34 * m.m42) + (m.m12 * m.m31 * m.m44) - (m.m11 * m.m32 * m.m44),
+		(m.m12 * m.m24 * m.m41) - (m.m14 * m.m22 * m.m41) + (m.m14 * m.m21 * m.m42) - (m.m11 * m.m24 * m.m42) - (m.m12 * m.m21 * m.m44) + (m.m11 * m.m22 * m.m44),
+		(m.m14 * m.m22 * m.m31) - (m.m12 * m.m24 * m.m31) - (m.m14 * m.m21 * m.m32) + (m.m11 * m.m24 * m.m32) + (m.m12 * m.m21 * m.m34) - (m.m11 * m.m22 * m.m34),
+		(m.m23 * m.m32 * m.m41) - (m.m22 * m.m33 * m.m41) - (m.m23 * m.m31 * m.m42) + (m.m21 * m.m33 * m.m42) + (m.m22 * m.m31 * m.m43) - (m.m21 * m.m32 * m.m43),
+		(m.m12 * m.m33 * m.m41) - (m.m13 * m.m32 * m.m41) + (m.m13 * m.m31 * m.m42) - (m.m11 * m.m33 * m.m42) - (m.m12 * m.m31 * m.m43) + (m.m11 * m.m32 * m.m43),
+		(m.m13 * m.m22 * m.m41) - (m.m12 * m.m23 * m.m41) - (m.m13 * m.m21 * m.m42) + (m.m11 * m.m23 * m.m42) + (m.m12 * m.m21 * m.m43) - (m.m11 * m.m22 * m.m43),
+		(m.m12 * m.m23 * m.m31) - (m.m13 * m.m22 * m.m31) + (m.m13 * m.m21 * m.m32) - (m.m11 * m.m23 * m.m32) - (m.m12 * m.m21 * m.m33) + (m.m11 * m.m22 * m.m33),
+	}
+}
+
 // MultiplyMatrices multiplies two 4x4 matrices together, and returns a pointer
 // to the result.
 func MultiplyMatrices(a Matrix44, b Matrix44) *Matrix44 {

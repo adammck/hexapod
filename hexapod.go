@@ -27,8 +27,11 @@ type Hexapod struct {
 	Controller *retroport.SNES
 
 	// The world coordinates of the center of the hexapod.
-	CurrentPosition Vector3
-	CurrentRotation float64
+	// TODO (adammck): Store the rotation as Euler angles, and modify the
+	//                 heading when rotating with L/R buttons. This is more
+	//                 self-documenting than storing the heading as a float.
+	Position Vector3
+	Rotation float64
 
 	// The state that the hexapod is currently in.
 	State        State
@@ -38,23 +41,17 @@ type Hexapod struct {
 	Halt bool
 
 	// ???
-	TargetPosition Vector3
-	TargetRotation float64
-	StepRadius     float64
-	Legs           [6]*Leg
+	StepRadius float64
+	Legs       [6]*Leg
 }
 
-//
 // NewHexapod creates a new Hexapod object on the given Dynamixel network.
-//
 func NewHexapod(network *dynamixel.DynamixelNetwork) *Hexapod {
 	return &Hexapod{
-		Network:         network,
-		CurrentPosition: Vector3{0, 0, 0},
-		TargetPosition:  Vector3{0, 0, 0},
-		CurrentRotation: 0.0,
-		TargetRotation:  0.0,
-		StepRadius:      220,
+		Network:    network,
+		Position:   Vector3{0, 0, 0},
+		Rotation:   0.0,
+		StepRadius: 220,
 		Legs: [6]*Leg{
 
 			// Points are the X/Y/Z offsets from the center of the top of the body to
@@ -136,12 +133,31 @@ func (h *Hexapod) homeFootPosition(leg *Leg, o Vector3) *Vector3 {
 	return &Vector3{o.X + x, o.Y - 20, o.Z + z}
 }
 
+// Projects a point in the World coordinate space into the coordinate space of
+// given leg (by its index). This method is on the Hexapod rather than the Leg,
+// to minimize the amount of state which we need to share with each leg.
+func (h *Hexapod) Project(legIndex int, vec Vector3) Vector3 {
+	hm := h.Legs[legIndex].Matrix()
+	wm := MultiplyMatrices(hm, h.Local())
+	return vec.MultiplyByMatrix44(*wm)
+}
+
+func (h *Hexapod) World() Matrix44 {
+	return *MakeMatrix44(h.Position, *MakeSingularEulerAngle(RotationHeading, h.Rotation))
+}
+
+// Returns a matrix to transform a vector in the world coordinate space into the
+// hexapod's space, taking into account its current position and rotation.
+func (h *Hexapod) Local() Matrix44 {
+	return h.World().Inverse()
+}
+
 // MainLoop watches for changes to the target position and rotation, and tries
 // to apply it as gracefully as possible. Returns an exit code.
 func (h *Hexapod) MainLoop() int {
 
 	// Shorthand
-	o := h.CurrentPosition
+	o := h.Position
 
 	// Initial state
 	h.State = sInit
@@ -230,11 +246,11 @@ func (h *Hexapod) MainLoop() int {
 		}
 
 		if h.Controller.L {
-			h.CurrentRotation -= 1.0
+			h.Rotation -= 1.0
 		}
 
 		if h.Controller.R {
-			h.CurrentRotation += 1.0
+			h.Rotation += 1.0
 		}
 
 		if h.Controller.Y {
