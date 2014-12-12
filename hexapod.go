@@ -124,13 +124,13 @@ func (hexapod *Hexapod) SyncLegs(f func(leg *Leg)) {
 	})
 }
 
-func (h *Hexapod) homeFootPosition(leg *Leg, o Vector3) *Vector3 {
-	//o := h.CurrentPosition
+// homeFootPosition returns a vector in the WORLD coordinate space for the home
+// position of the given leg.
+func (h *Hexapod) homeFootPosition(leg *Leg) *Vector3 {
 	r := rad(leg.Angle)
-	//r := rad(leg.Angle - angle)
 	x := math.Cos(r) * h.StepRadius
 	z := -math.Sin(r) * h.StepRadius
-	return &Vector3{o.X + x, o.Y - 20, o.Z + z}
+	return h.Position.Add(Vector3{x, -20, z})
 }
 
 // Projects a point in the World coordinate space into the coordinate space of
@@ -142,12 +142,15 @@ func (h *Hexapod) Project(legIndex int, vec Vector3) Vector3 {
 	return vec.MultiplyByMatrix44(*wm)
 }
 
+// World returns a matrix to transform a vector in the hexapod coordinate space
+// into the world space.
 func (h *Hexapod) World() Matrix44 {
 	return *MakeMatrix44(h.Position, *MakeSingularEulerAngle(RotationHeading, h.Rotation))
 }
 
-// Returns a matrix to transform a vector in the world coordinate space into the
-// hexapod's space, taking into account its current position and rotation.
+// Local returns a matrix to transform a vector in the world coordinate space
+// into the hexapod's space, taking into account its current position and
+// rotation.
 func (h *Hexapod) Local() Matrix44 {
 	return h.World().Inverse()
 }
@@ -155,9 +158,6 @@ func (h *Hexapod) Local() Matrix44 {
 // MainLoop watches for changes to the target position and rotation, and tries
 // to apply it as gracefully as possible. Returns an exit code.
 func (h *Hexapod) MainLoop() int {
-
-	// Shorthand
-	o := h.Position
 
 	// Initial state
 	h.State = sInit
@@ -174,14 +174,16 @@ func (h *Hexapod) MainLoop() int {
 	stepOverCount := 2
 	stepDownCount := 3
 
-	// World foot positions
+	// Foot positions in the WORLD coordinate space. We must store them in this
+	// space rather than the hexapod space, so they stay put when we move the
+	// origin around.
 	feet := [6]*Vector3{
-		h.homeFootPosition(h.Legs[0], o),
-		h.homeFootPosition(h.Legs[1], o),
-		h.homeFootPosition(h.Legs[2], o),
-		h.homeFootPosition(h.Legs[3], o),
-		h.homeFootPosition(h.Legs[4], o),
-		h.homeFootPosition(h.Legs[5], o),
+		h.homeFootPosition(h.Legs[0]),
+		h.homeFootPosition(h.Legs[1]),
+		h.homeFootPosition(h.Legs[2]),
+		h.homeFootPosition(h.Legs[3]),
+		h.homeFootPosition(h.Legs[4]),
+		h.homeFootPosition(h.Legs[5]),
 	}
 
 	// World positions of the NEXT foot position. These are nil if we're okay with
@@ -230,19 +232,19 @@ func (h *Hexapod) MainLoop() int {
 		//fmt.Printf("State=%s[%d]\n", h.State, h.stateCounter)
 
 		if h.Controller.Up {
-			o.Z += mov
+			h.Position.Z += mov
 		}
 
 		if h.Controller.Down {
-			o.Z -= mov
+			h.Position.Z -= mov
 		}
 
 		if h.Controller.Left {
-			o.X -= mov
+			h.Position.X -= mov
 		}
 
 		if h.Controller.Right {
-			o.X += mov
+			h.Position.X += mov
 		}
 
 		if h.Controller.L {
@@ -254,11 +256,11 @@ func (h *Hexapod) MainLoop() int {
 		}
 
 		if h.Controller.Y {
-			o.Y -= mov
+			h.Position.Y -= mov
 		}
 
 		if h.Controller.X {
-			o.Y += mov
+			h.Position.Y += mov
 		}
 
 		if h.Controller.Start && h.Controller.Select {
@@ -330,7 +332,7 @@ func (h *Hexapod) MainLoop() int {
 			needsMove := false
 
 			for i, _ := range h.Legs {
-				a := h.homeFootPosition(h.Legs[i], o)
+				a := h.homeFootPosition(h.Legs[i])
 				a.Y = feet[i].Y
 				if feet[i].Distance(*a) > minStepDistance {
 					needsMove = true
@@ -354,7 +356,7 @@ func (h *Hexapod) MainLoop() int {
 			//       constant direciton.
 			if h.stateCounter >= stepUpCount {
 				for _, ii := range legSets[sLegsIndex] {
-					nextFeet[ii] = h.homeFootPosition(h.Legs[ii], o)
+					nextFeet[ii] = h.homeFootPosition(h.Legs[ii])
 				}
 
 				h.SetState(sStepOver)
@@ -400,7 +402,8 @@ func (h *Hexapod) MainLoop() int {
 		// Update the position of each foot
 		h.Sync(func() {
 			for i, leg := range h.Legs {
-				pp := Vector3{feet[i].X - o.X, feet[i].Y - o.Y, feet[i].Z - o.Z}
+				//pp := Vector3{feet[i].X - h.Position.X, feet[i].Y - h.Position.Y, feet[i].Z - h.Position.Z}
+				pp := Vector3{feet[i].X - h.Position.X, feet[i].Y - h.Position.Y, feet[i].Z - h.Position.Z}
 				leg.SetGoal(pp)
 			}
 		})
