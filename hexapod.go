@@ -3,7 +3,7 @@ package hexapod
 import (
 	"fmt"
 	"github.com/adammck/dynamixel"
-	"github.com/adammck/retroport"
+	"github.com/adammck/sixaxis"
 	"github.com/jacobsa/go-serial/serial"
 	"math"
 	"time"
@@ -24,7 +24,7 @@ const (
 
 type Hexapod struct {
 	Network    *dynamixel.DynamixelNetwork
-	Controller *retroport.SNES
+	Controller *sixaxis.SA
 
 	// The world coordinates of the center of the hexapod.
 	// TODO (adammck): Store the rotation as Euler angles, and modify the
@@ -231,36 +231,20 @@ func (h *Hexapod) MainLoop() int {
 		h.stateCounter += 1
 		//fmt.Printf("State=%s[%d]\n", h.State, h.stateCounter)
 
-		if h.Controller.Up {
-			h.Position.Z += mov
+		if h.Controller.LeftStick.X != 0 {
+			h.Position.X += (float64(h.Controller.LeftStick.X) / 127.0) * mov
 		}
 
-		if h.Controller.Down {
-			h.Position.Z -= mov
+		if h.Controller.LeftStick.Y != 0 {
+			h.Position.Z -= (float64(h.Controller.LeftStick.Y) / 127.0) * mov
 		}
 
-		if h.Controller.Left {
-			h.Position.X -= mov
+		if h.Controller.Up > 0 {
+			h.Position.Y += 2
 		}
 
-		if h.Controller.Right {
-			h.Position.X += mov
-		}
-
-		if h.Controller.L {
-			h.Rotation -= 1.0
-		}
-
-		if h.Controller.R {
-			h.Rotation += 1.0
-		}
-
-		if h.Controller.Y {
-			h.Position.Y -= mov
-		}
-
-		if h.Controller.X {
-			h.Position.Y += mov
+		if h.Controller.Down > 0 {
+			h.Position.Y -= 2
 		}
 
 		if h.Controller.Start && h.Controller.Select {
@@ -403,7 +387,7 @@ func (h *Hexapod) MainLoop() int {
 		h.Sync(func() {
 			for i, leg := range h.Legs {
 				//pp := Vector3{feet[i].X - h.Position.X, feet[i].Y - h.Position.Y, feet[i].Z - h.Position.Z}
-				pp := Vector3{feet[i].X - h.Position.X, feet[i].Y - h.Position.Y, feet[i].Z - h.Position.Z}
+				pp := feet[i].MultiplyByMatrix44(h.Local())
 				leg.SetGoal(pp)
 			}
 		})

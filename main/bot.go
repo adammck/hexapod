@@ -9,7 +9,7 @@ import (
   "os/exec"
   "runtime/pprof"
   "github.com/adammck/hexapod"
-  "github.com/adammck/retroport"
+  "github.com/adammck/sixaxis"
 )
 
 var (
@@ -39,12 +39,12 @@ func main() {
   h.Network.Debug = *debug
 
   // open and connect the controller
-  f, err := os.Open("/dev/hidraw0")
+  f, err := os.Open("/dev/input/event1")
   if err != nil {
     fmt.Println(err)
     os.Exit(1)
   }
-  h.Controller = retroport.MakeSNES(f)
+  h.Controller = sixaxis.New(f)
   go h.Controller.Run()
 
   // Catch both SIGINT (ctrl+c) and SIGTERM (kill/systemd), to allow the hexapod
