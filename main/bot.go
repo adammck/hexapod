@@ -39,7 +39,7 @@ func main() {
   h.Network.Debug = *debug
 
   // open and connect the controller
-  f, err := os.Open("/dev/input/event1")
+  f, err := os.Open("/dev/input/event0")
   if err != nil {
     fmt.Println(err)
     os.Exit(1)
