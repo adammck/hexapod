@@ -11,9 +11,9 @@ very good, but I've learned a lot while building and writing it. Here's a model:
 * [Printrbot Simple Metal] (http://printrbot.com/shop/assembled-simple-metal/)
 * [Dynamixel AX-12A] (http://www.trossenrobotics.com/dynamixel-ax-12-robot-actuator.aspx)
 * [Raspberry Pi, Model B+] (http://www.raspberrypi.org/products/model-b-plus/)
+* [Sony Sixaxis] (https://en.wikipedia.org/wiki/Sixaxis) controller
 * [USB2AX] (http://www.xevelabs.com/doku.php?id=product:usb2ax:usb2ax)
 * [SparkFun USB MicroB Breakout] (https://www.sparkfun.com/products/10031)
-* [USB Super RetroPort] (http://www.retrousb.com/product_info.php?cPath=21&products_id=29)
 * [RioRand LM2596] (http://amzn.com/B008BHAOQO)
 * [Tiger 11.1v 2200mAh LiPo] (http://www.trossenrobotics.com/3s-11v-2200mah-25c-lipo-battery)
 * [Mean Well GS90A12-P1M] (http://www.jameco.com/webapp/wcs/stores/servlet/Product_10001_10001_2078291_-1) power supply
