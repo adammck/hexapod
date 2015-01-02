@@ -16,7 +16,9 @@ very good, but I've learned a lot while building and writing it. Here's a model:
 * [USB Super RetroPort] (http://www.retrousb.com/product_info.php?cPath=21&products_id=29)
 * [RioRand LM2596] (http://amzn.com/B008BHAOQO)
 * [Tiger 11.1v 2200mAh LiPo] (http://www.trossenrobotics.com/3s-11v-2200mah-25c-lipo-battery)
+* [Mean Well GS90A12-P1M] (http://www.jameco.com/webapp/wcs/stores/servlet/Product_10001_10001_2078291_-1) power supply
 * [Edimax EW-7811Un] (http://amzn.com/B003MTTJOY)
+* [Medialink MUA-BA3] (http://amzn.com/B004LNXO28) bluetooth adapter
 
 
 ## Usage
