@@ -1,6 +1,7 @@
 #!/bin/bash -e
 cd $(cd `dirname "$0"`; cd ..; pwd)
 
-USER=root
-HOST=hexapod
+USER="root"
+HOST="hexapod.local"
+
 ssh -t $USER@$HOST "sudo shutdown -h now" || exit 1
