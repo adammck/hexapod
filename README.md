@@ -19,11 +19,6 @@ very good, but I've learned a lot while building and writing it. Here's a model:
 * [Edimax EW-7811Un] (http://amzn.com/B003MTTJOY)
 
 
-## Requirements
-
-The hexapod's hostname must be `hexapod`.
-
-
 ## Usage
 
 To build and deploy a release:
