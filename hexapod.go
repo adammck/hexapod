@@ -20,6 +20,14 @@ const (
 	sStepUp   State = "sStepUp"
 	sStepOver State = "sStepOver"
 	sStepDown State = "sStepDown"
+
+	// The number of seconds between voltage checks. These are pretty quick, but
+	// not instant. Running at low voltage for too long will damage the battery,
+	// so it should be checked pretty regularly.
+	voltageCheckInterval = 5
+
+	// The voltage at which the hexapod should forcibly shut down.
+	minimumVoltage = 9.6
 )
 
 type Hexapod struct {
@@ -43,6 +51,9 @@ type Hexapod struct {
 	// ???
 	StepRadius float64
 	Legs       [6]*Leg
+
+	// The time at which the voltage level was checked.
+	lastVoltageCheck time.Time
 }
 
 // NewHexapod creates a new Hexapod object on the given Dynamixel network.
@@ -142,6 +153,31 @@ func (h *Hexapod) Project(legIndex int, vec Vector3) Vector3 {
 	return vec.MultiplyByMatrix44(*wm)
 }
 
+// NeedsVoltageCheck returns true if it's been a while since we checked the
+// voltage level. The timeout is pretty arbitrary.
+func (h *Hexapod) NeedsVoltageCheck() bool {
+	return time.Since(h.lastVoltageCheck) > voltageCheckInterval
+}
+
+// CheckVoltage fetches the voltage level of an arbitrary servo, and returns an
+// error if it's too low. In this case, the program should be terminated as soon
+// as possible to preserve the battery.
+func (h *Hexapod) CheckVoltage() error {
+	v, err := h.Legs[0].Coxa.Voltage()
+	h.lastVoltageCheck = time.Now()
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("voltage: %.2fv\n", v)
+
+	if v < minimumVoltage {
+		return fmt.Errorf("low voltage: %.2fv", v)
+	}
+
+	return nil
+}
+
 // World returns a matrix to transform a vector in the hexapod coordinate space
 // into the world space.
 func (h *Hexapod) World() Matrix44 {
@@ -228,6 +264,8 @@ func (h *Hexapod) MainLoop() int {
 	sLegsIndex := 0
 
 	for {
+
+
 		h.stateCounter += 1
 		//fmt.Printf("State=%s[%d]\n", h.State, h.stateCounter)
 
@@ -247,8 +285,20 @@ func (h *Hexapod) MainLoop() int {
 			h.Position.Y -= 2
 		}
 
+		// TODO (adammck): This terminates the program, and shuts down the RPi.
+		//                 Should we set the state to halt first?
 		if h.Controller.Start && h.Controller.Select {
 			return 1
+		}
+
+		// Check the voltage level regularly, and halt if it gets too low, to
+		// avoid damaging the LiPo (again).
+		if h.NeedsVoltageCheck() {
+			err := h.CheckVoltage()
+			if err != nil {
+				fmt.Printf("halting due to: %s\n", err)
+				h.SetState(sHalt)
+			}
 		}
 
 		// At any time, pressing select terminates. This can also be set from
