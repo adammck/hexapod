@@ -417,7 +417,6 @@ func (h *Hexapod) MainLoop() (exitCode int) {
 		case sStepUp:
 			if h.stateCounter == 1 {
 				for _, ii := range legSets[sLegsIndex] {
-					h.Legs[ii].SetLED(true)
 					feet[ii].Y = footUp
 				}
 			}
@@ -449,7 +448,6 @@ func (h *Hexapod) MainLoop() (exitCode int) {
 		case sStepDown:
 			if h.stateCounter == 1 {
 				for _, ii := range legSets[sLegsIndex] {
-					h.Legs[ii].SetLED(false)
 					feet[ii].Y = footDown
 				}
 			}
