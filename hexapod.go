@@ -12,6 +12,7 @@ import (
 type State string
 
 const (
+	sDefault  State = ""
 	sInit     State = "sInit"
 	sHalt     State = "sHalt"
 	sStandUp  State = "sStandUp"
@@ -29,9 +30,24 @@ const (
 	// The voltage at which the hexapod should forcibly shut down.
 	minimumVoltage = 9.6
 
-	// The height (on the Y axis) which the foot should be moved to on the up
-	// step, relative to the origin.
-	baseFootUp = -40.0
+	// The offset (on the Y axis) which feet should be moved to on the up step,
+	// relative to the origin.
+	baseFootUp = 40.0
+
+	// The offset (on the Y axis) which feet should be positioned at on the down
+	// step (which is the default position when standing), relative to the
+	// origin.
+	baseFootDown = 0.0
+
+	sitDownClearance = 0.0
+
+	// Blah
+	standUpClearance = 40.0
+
+	// Distance (on the X/Z axis) from the origin to the point at which the feet
+	// should be positioned. This isn't adjustable at runtime, because there are
+	// very few valid settings.
+	stepRadius = 220.0
 )
 
 type Hexapod struct {
@@ -54,30 +70,33 @@ type Hexapod struct {
 	Halt bool
 
 	// ???
-	StepRadius float64
-	Legs       [6]*Leg
+	Legs [6]*Leg
 
 	// The time at which the voltage level was checked.
 	lastVoltageCheck time.Time
+
+	baseClearance float64
 }
 
 // NewHexapod creates a new Hexapod object on the given Dynamixel network.
 func NewHexapod(network *dynamixel.DynamixelNetwork) *Hexapod {
 	return &Hexapod{
-		Network:    network,
-		Position:   Vector3{0, 0, 0},
-		Rotation:   0.0,
-		StepRadius: 220,
+		Network:       network,
+		Position:      Vector3{0, 0, 0},
+		Rotation:      0.0,
+		State:         sDefault,
+		baseClearance: sitDownClearance,
 		Legs: [6]*Leg{
 
-			// Points are the X/Y/Z offsets from the center of the top of the body to
-			// the center of the coxa pivots.
-			NewLeg(network, 10, "FL", MakeVector3(-51.1769, -19, 98), -120), // Front Left  - 0
-			NewLeg(network, 20, "FR", MakeVector3(51.1769, -19, 98), -60),   // Front Right - 1
-			NewLeg(network, 30, "MR", MakeVector3(66, -19, 0), 0),           // Mid Right   - 2
-			NewLeg(network, 40, "BR", MakeVector3(51.1769, -19, -98), 60),   // Back Right  - 3
-			NewLeg(network, 50, "BL", MakeVector3(-51.1769, -19, -98), 120), // Back Left   - 4
-			NewLeg(network, 60, "ML", MakeVector3(-66, -19, 0), 180),        // Mid Left    - 5
+			// Leg origins are relative to the hexapod origin, which is the X/Z
+			// center of the body, level with the bottom of the coxas (which
+			// protrude slightly below the body) on the Y axis.
+			NewLeg(network, 10, "FL", MakeVector3(-51.1769, 24, 98), -120), // Front Left  - 0
+			NewLeg(network, 20, "FR", MakeVector3(51.1769, 24, 98), -60),   // Front Right - 1
+			NewLeg(network, 30, "MR", MakeVector3(66, 24, 0), 0),           // Mid Right   - 2
+			NewLeg(network, 40, "BR", MakeVector3(51.1769, 24, -98), 60),   // Back Right  - 3
+			NewLeg(network, 50, "BL", MakeVector3(-51.1769, 24, -98), 120), // Back Left   - 4
+			NewLeg(network, 60, "ML", MakeVector3(-66, 24, 0), 180),        // Mid Left    - 5
 		},
 	}
 }
@@ -121,7 +140,18 @@ func (h *Hexapod) SetState(s State) {
 // when stepping up. This is generally static, but is increased while the L2
 // trigger is pressed. This is pretty handy for stepping over obstacles.
 func (h *Hexapod) stepUpPosition() float64 {
-	return baseFootUp + ((float64(h.Controller.L2) / 255.0) * 50)
+	return baseFootUp + ((float64(h.Controller.L2) / 255.0) * 100)
+}
+
+func (h *Hexapod) stepDownPosition() float64 {
+	return baseFootDown
+}
+
+// Clearance returns the distance (on the Y axis) which the body should be off
+// the ground. This is mostly constant, but can be increased temporarily by
+// pressing R2.
+func (h *Hexapod) Clearance() float64 {
+	return h.baseClearance + ((float64(h.Controller.R2) / 255.0) * 100)
 }
 
 // StateDuration returns the duration since the hexapod entered the current
@@ -158,9 +188,9 @@ func (hexapod *Hexapod) SyncLegs(f func(leg *Leg)) {
 // position of the given leg.
 func (h *Hexapod) homeFootPosition(leg *Leg) *Vector3 {
 	r := rad(h.Rotation + leg.Angle)
-	x := math.Cos(r) * h.StepRadius
-	z := -math.Sin(r) * h.StepRadius
-	return h.Position.Add(Vector3{x, -43, z})
+	x := math.Cos(r) * stepRadius
+	z := -math.Sin(r) * stepRadius
+	return h.Position.Add(Vector3{x, h.stepDownPosition(), z})
 }
 
 // Projects a point in the World coordinate space into the coordinate space of
@@ -214,14 +244,10 @@ func (h *Hexapod) Local() Matrix44 {
 // to apply it as gracefully as possible. Returns an exit code.
 func (h *Hexapod) MainLoop() (exitCode int) {
 
-	// Initial state
-	h.SetState(sInit)
-
 	// settings
 	legSetSize := 2
 	sleepTime := 10 * time.Millisecond
 	mov := 2.0
-	footDown := -80.0
 	minStepDistance := 20.0
 	stepUpCount := 2
 	stepOverCount := 2
@@ -229,7 +255,7 @@ func (h *Hexapod) MainLoop() (exitCode int) {
 
 	// The maximum speed to rotate (i.e. when the right stick is fully pressed)
 	// in degrees per loop.
-	rotationSpeed := 0.5
+	rotationSpeed := 1.0
 
 	// Foot positions in the WORLD coordinate space. We must store them in this
 	// space rather than the hexapod space, so they stay put when we move the
@@ -333,11 +359,11 @@ func (h *Hexapod) MainLoop() (exitCode int) {
 		// Move the origin up (away from the ground) with the dpad. This alters
 		// the gait my keeping the body up in the air. It looks weird but works.
 		if h.Controller.Up > 0 {
-			vecMove.Y += 2
+			h.baseClearance += 2
 		}
 
 		if h.Controller.Down > 0 {
-			vecMove.Y -= 2
+			h.baseClearance -= 2
 		}
 
 		// Update the position, if it's changed.
@@ -346,6 +372,9 @@ func (h *Hexapod) MainLoop() (exitCode int) {
 		}
 
 		dontMove = (h.Controller.Square > 0)
+
+		// wat
+		h.Position.Y = h.Clearance()
 
 		// Check the voltage level regularly, and halt if it gets too low, to
 		// avoid damaging the LiPo (again).
@@ -369,6 +398,9 @@ func (h *Hexapod) MainLoop() (exitCode int) {
 		}
 
 		switch h.State {
+		case sDefault:
+			h.SetState(sInit)
+
 		case sInit:
 
 			// Initialize one leg each second.
@@ -405,25 +437,19 @@ func (h *Hexapod) MainLoop() (exitCode int) {
 
 			return
 
-		// After initializing, push the feet downloads to lift the hex off the
-		// ground. This is to reduce torque on the joints when moving into the
-		// initial stance.
+		// After initialzation, raise the clearance to lift the body off the
+		// ground, into the standing position.
 		case sStandUp:
-			for _, foot := range feet {
-				foot.Y -= 2
-			}
-
-			// Once we've stood up, advance to the walking state.
-			if feet[0].Y <= footDown {
+			h.baseClearance += 2
+			if h.baseClearance >= standUpClearance {
 				h.SetState(sStand)
 			}
 
+		// Before halting, lower the clearance until the body is sitting on the
+		// ground.
 		case sSitDown:
-			for _, foot := range feet {
-				foot.Y += 2
-			}
-
-			if feet[0].Y >= h.stepUpPosition() {
+			h.baseClearance -= 2
+			if h.baseClearance <= sitDownClearance {
 				h.SetState(sHalt)
 			}
 
@@ -478,7 +504,7 @@ func (h *Hexapod) MainLoop() (exitCode int) {
 		case sStepDown:
 			if h.stateCounter == 1 {
 				for _, ii := range legSets[sLegsIndex] {
-					feet[ii].Y = footDown
+					feet[ii].Y = h.stepDownPosition()
 				}
 			}
 
