@@ -28,6 +28,10 @@ const (
 
 	// The voltage at which the hexapod should forcibly shut down.
 	minimumVoltage = 9.6
+
+	// The height (on the Y axis) which the foot should be moved to on the up
+	// step, relative to the origin.
+	baseFootUp = -40.0
 )
 
 type Hexapod struct {
@@ -111,6 +115,13 @@ func (h *Hexapod) SetState(s State) {
 	h.stateCounter = 0
 	h.stateTime = time.Now()
 	h.State = s
+}
+
+// stepUpPosition returns the height (on the Y axis) which a foot should reach
+// when stepping up. This is generally static, but is increased while the L2
+// trigger is pressed. This is pretty handy for stepping over obstacles.
+func (h *Hexapod) stepUpPosition() float64 {
+	return baseFootUp + ((float64(h.Controller.L2) / 255.0) * 50)
 }
 
 // StateDuration returns the duration since the hexapod entered the current
@@ -210,7 +221,6 @@ func (h *Hexapod) MainLoop() (exitCode int) {
 	legSetSize := 2
 	sleepTime := 10 * time.Millisecond
 	mov := 2.0
-	footUp := -40.0
 	footDown := -80.0
 	minStepDistance := 20.0
 	stepUpCount := 2
@@ -413,7 +423,7 @@ func (h *Hexapod) MainLoop() (exitCode int) {
 				foot.Y += 2
 			}
 
-			if feet[0].Y >= footUp {
+			if feet[0].Y >= h.stepUpPosition() {
 				h.SetState(sHalt)
 			}
 
@@ -437,7 +447,7 @@ func (h *Hexapod) MainLoop() (exitCode int) {
 		case sStepUp:
 			if h.stateCounter == 1 {
 				for _, ii := range legSets[sLegsIndex] {
-					feet[ii].Y = footUp
+					feet[ii].Y = h.stepUpPosition()
 				}
 			}
 
