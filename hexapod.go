@@ -146,7 +146,7 @@ func (hexapod *Hexapod) SyncLegs(f func(leg *Leg)) {
 // homeFootPosition returns a vector in the WORLD coordinate space for the home
 // position of the given leg.
 func (h *Hexapod) homeFootPosition(leg *Leg) *Vector3 {
-	r := rad(leg.Angle)
+	r := rad(h.Rotation + leg.Angle)
 	x := math.Cos(r) * h.StepRadius
 	z := -math.Sin(r) * h.StepRadius
 	return h.Position.Add(Vector3{x, -43, z})
@@ -216,6 +216,10 @@ func (h *Hexapod) MainLoop() (exitCode int) {
 	stepUpCount := 2
 	stepOverCount := 2
 	stepDownCount := 3
+
+	// The maximum speed to rotate (i.e. when the right stick is fully pressed)
+	// in degrees per loop.
+	rotationSpeed := 0.5
 
 	// Foot positions in the WORLD coordinate space. We must store them in this
 	// space rather than the hexapod space, so they stay put when we move the
@@ -299,20 +303,36 @@ func (h *Hexapod) MainLoop() (exitCode int) {
 		h.stateCounter += 1
 		//fmt.Printf("State=%s[%d]\n", h.State, h.stateCounter)
 
+		// Rotate with the right stick
+		if h.Controller.RightStick.X != 0 {
+			h.Rotation += (float64(h.Controller.RightStick.X) / 127.0) * rotationSpeed
+		}
+
+		// How much the origin should move this frame. Default is zero, but this
+		// it mutated (below) by the various buttons.
+		vecMove := MakeVector3(0, 0, 0)
+
 		if h.Controller.LeftStick.X != 0 {
-			h.Position.X += (float64(h.Controller.LeftStick.X) / 127.0) * mov
+			vecMove.X = (float64(h.Controller.LeftStick.X) / 127.0) * mov
 		}
 
 		if h.Controller.LeftStick.Y != 0 {
-			h.Position.Z -= (float64(h.Controller.LeftStick.Y) / 127.0) * mov
+			vecMove.Z = (float64(-h.Controller.LeftStick.Y) / 127.0) * mov
 		}
 
+		// Move the origin up (away from the ground) with the dpad. This alters
+		// the gait my keeping the body up in the air. It looks weird but works.
 		if h.Controller.Up > 0 {
-			h.Position.Y += 2
+			vecMove.Y += 2
 		}
 
 		if h.Controller.Down > 0 {
-			h.Position.Y -= 2
+			vecMove.Y -= 2
+		}
+
+		// Update the position, if it's changed.
+		if !vecMove.Zero() {
+			h.Position = vecMove.MultiplyByMatrix44(h.World())
 		}
 
 		dontMove = (h.Controller.Square > 0)
