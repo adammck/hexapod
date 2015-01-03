@@ -248,11 +248,15 @@ func (h *Hexapod) MainLoop() (exitCode int) {
 
 	// The time (in seconds) between each leg initialization. This should be as
 	// low as possible, since it delays startup.
-	initInterval := 0.5
+	initInterval := 0.25
 
 	// The count (not index!) of the leg which we're currently initializing.
 	// When it reaches six, we've finished initialzing.
 	initCounter := 0
+
+	// Whether the hexapod should be prevented from moving its feet. It can't
+	// walk when this is enable, only lean, so this is only useful for testing.
+	dontMove := false
 
 	var legSets [][]int
 	switch legSetSize {
@@ -310,6 +314,8 @@ func (h *Hexapod) MainLoop() (exitCode int) {
 		if h.Controller.Down > 0 {
 			h.Position.Y -= 2
 		}
+
+		dontMove = (h.Controller.Square > 0)
 
 		// Check the voltage level regularly, and halt if it gets too low, to
 		// avoid damaging the LiPo (again).
@@ -391,20 +397,21 @@ func (h *Hexapod) MainLoop() (exitCode int) {
 				h.SetState(sHalt)
 			}
 
-		// TODO: Move feet back to home positions when standing!
 		case sStand:
-			needsMove := false
+			if !dontMove {
+				needsMove := false
 
-			for i, _ := range h.Legs {
-				a := h.homeFootPosition(h.Legs[i])
-				a.Y = feet[i].Y
-				if feet[i].Distance(*a) > minStepDistance {
-					needsMove = true
+				for i, _ := range h.Legs {
+					a := h.homeFootPosition(h.Legs[i])
+					a.Y = feet[i].Y
+					if feet[i].Distance(*a) > minStepDistance {
+						needsMove = true
+					}
 				}
-			}
 
-			if needsMove {
-				h.SetState(sStepUp)
+				if needsMove {
+					h.SetState(sStepUp)
+				}
 			}
 
 		case sStepUp:
