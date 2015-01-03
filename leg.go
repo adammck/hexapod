@@ -17,17 +17,21 @@ type Leg struct {
 	Femur  *dynamixel.DynamixelServo
 	Tibia  *dynamixel.DynamixelServo
 	Tarsus *dynamixel.DynamixelServo
+
+	// Has the leg been initialized yet? It can't be moved until it has.
+	Initialized bool
 }
 
 func NewLeg(network *dynamixel.DynamixelNetwork, baseId int, name string, origin *Vector3, angle float64) *Leg {
 	return &Leg{
-		Origin: origin,
-		Angle:  angle,
-		Name:   name,
-		Coxa:   dynamixel.NewServo(network, uint8(baseId+1)),
-		Femur:  dynamixel.NewServo(network, uint8(baseId+2)),
-		Tibia:  dynamixel.NewServo(network, uint8(baseId+3)),
-		Tarsus: dynamixel.NewServo(network, uint8(baseId+4)),
+		Origin:      origin,
+		Angle:       angle,
+		Name:        name,
+		Coxa:        dynamixel.NewServo(network, uint8(baseId+1)),
+		Femur:       dynamixel.NewServo(network, uint8(baseId+2)),
+		Tibia:       dynamixel.NewServo(network, uint8(baseId+3)),
+		Tarsus:      dynamixel.NewServo(network, uint8(baseId+4)),
+		Initialized: false,
 	}
 }
 
@@ -80,6 +84,11 @@ func (leg *Leg) segments() (*Segment, *Segment, *Segment, *Segment) {
 // to the center of the hexapod.
 func (leg *Leg) SetGoal(p Vector3) {
 	_, femur, _, _ := leg.segments()
+
+	// TODO (adammck): Return an error instead!
+	if !leg.Initialized {
+		panic("leg not initialized")
+	}
 
 	v := &Vector3{p.X, p.Y, p.Z}
 	vv := v.Add(Vector3{0, 64, 0})

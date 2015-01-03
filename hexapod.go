@@ -44,6 +44,7 @@ type Hexapod struct {
 	// The state that the hexapod is currently in.
 	State        State
 	stateCounter int
+	stateTime    time.Time
 
 	// Set to true if the hexapod should shut down ASAP
 	Halt bool
@@ -108,7 +109,14 @@ func NewHexapodFromPortName(portName string) (*Hexapod, error) {
 func (h *Hexapod) SetState(s State) {
 	fmt.Printf("State=%s\n", s)
 	h.stateCounter = 0
+	h.stateTime = time.Now()
 	h.State = s
+}
+
+// StateDuration returns the duration since the hexapod entered the current
+// state. This is a pretty fragile and crappy way of synchronizing things.
+func (h *Hexapod) StateDuration() time.Duration {
+	return time.Since(h.stateTime)
 }
 
 //
@@ -141,7 +149,7 @@ func (h *Hexapod) homeFootPosition(leg *Leg) *Vector3 {
 	r := rad(leg.Angle)
 	x := math.Cos(r) * h.StepRadius
 	z := -math.Sin(r) * h.StepRadius
-	return h.Position.Add(Vector3{x, -20, z})
+	return h.Position.Add(Vector3{x, -43, z})
 }
 
 // Projects a point in the World coordinate space into the coordinate space of
@@ -156,7 +164,7 @@ func (h *Hexapod) Project(legIndex int, vec Vector3) Vector3 {
 // NeedsVoltageCheck returns true if it's been a while since we checked the
 // voltage level. The timeout is pretty arbitrary.
 func (h *Hexapod) NeedsVoltageCheck() bool {
-	return time.Since(h.lastVoltageCheck) > voltageCheckInterval
+	return time.Since(h.lastVoltageCheck) > (voltageCheckInterval * time.Second)
 }
 
 // CheckVoltage fetches the voltage level of an arbitrary servo, and returns an
@@ -193,10 +201,10 @@ func (h *Hexapod) Local() Matrix44 {
 
 // MainLoop watches for changes to the target position and rotation, and tries
 // to apply it as gracefully as possible. Returns an exit code.
-func (h *Hexapod) MainLoop() int {
+func (h *Hexapod) MainLoop() (exitCode int) {
 
 	// Initial state
-	h.State = sInit
+	h.SetState(sInit)
 
 	// settings
 	legSetSize := 2
@@ -205,7 +213,6 @@ func (h *Hexapod) MainLoop() int {
 	footUp := -40.0
 	footDown := -80.0
 	minStepDistance := 20.0
-	initCount := 10
 	stepUpCount := 2
 	stepOverCount := 2
 	stepDownCount := 3
@@ -233,6 +240,20 @@ func (h *Hexapod) MainLoop() int {
 		nil,
 	}
 
+	// The order in which legs are initialized at startup. We start them one at
+	// a time, rather than all at once, to reduce the load on the power supply.
+	// When starting them all at once, quite often, the voltage drops low enough
+	// to reset the RPi.
+	initOrder := []int{0, 3, 1, 4, 2, 5}
+
+	// The time (in seconds) between each leg initialization. This should be as
+	// low as possible, since it delays startup.
+	initInterval := 0.5
+
+	// The count (not index!) of the leg which we're currently initializing.
+	// When it reaches six, we've finished initialzing.
+	initCounter := 0
+
 	var legSets [][]int
 	switch legSetSize {
 	case 1:
@@ -257,14 +278,19 @@ func (h *Hexapod) MainLoop() int {
 		}
 	default:
 		fmt.Println("invalid legSetSize!")
-		return 0
+		return
 	}
 
 	// Which legset are we currently stepping?
 	sLegsIndex := 0
 
-	for {
+	for _, leg := range h.Legs {
+		for _, servo := range leg.Servos() {
+			servo.SetStatusReturnLevel(1)
+		}
+	}
 
+	for {
 
 		h.stateCounter += 1
 		//fmt.Printf("State=%s[%d]\n", h.State, h.stateCounter)
@@ -285,12 +311,6 @@ func (h *Hexapod) MainLoop() int {
 			h.Position.Y -= 2
 		}
 
-		// TODO (adammck): This terminates the program, and shuts down the RPi.
-		//                 Should we set the state to halt first?
-		if h.Controller.Start && h.Controller.Select {
-			return 1
-		}
-
 		// Check the voltage level regularly, and halt if it gets too low, to
 		// avoid damaging the LiPo (again).
 		if h.NeedsVoltageCheck() {
@@ -304,6 +324,9 @@ func (h *Hexapod) MainLoop() int {
 		// At any time, pressing select terminates. This can also be set from
 		// another goroutine, to handle e.g. SIGTERM.
 		if h.Controller.Start || h.Halt {
+			if h.Controller.Select {
+				exitCode = 1
+			}
 			if h.State != sSitDown && h.State != sHalt {
 				h.SetState(sSitDown)
 			}
@@ -312,20 +335,27 @@ func (h *Hexapod) MainLoop() int {
 		switch h.State {
 		case sInit:
 
-			// Initialize each servo
-			if h.stateCounter == 1 {
-				for _, leg := range h.Legs {
+			// Initialize one leg each second.
+			if int(h.StateDuration().Seconds()/initInterval) > initCounter {
+
+				// If we still have legs to initialize, do the next one.
+				if initCounter < len(h.Legs) {
+					leg := h.Legs[initOrder[initCounter]]
+
 					for _, servo := range leg.Servos() {
-						servo.SetStatusReturnLevel(1)
 						servo.SetTorqueEnable(true)
 						servo.SetMovingSpeed(512)
 					}
-				}
-			}
 
-			// Pause at this state for a while, then stand up.
-			if h.stateCounter >= initCount {
-				h.SetState(sStandUp)
+					leg.Initialized = true
+					initCounter += 1
+
+				} else {
+					// No more legs to initialize, so advance to the next state.
+					// We wait until the next initCounter before advancing, to
+					// give the last leg a second to start.
+					h.SetState(sStandUp)
+				}
 			}
 
 		case sHalt:
@@ -337,7 +367,7 @@ func (h *Hexapod) MainLoop() int {
 				}
 			}
 
-			return 0
+			return
 
 		// After initializing, push the feet downloads to lift the hex off the
 		// ground. This is to reduce torque on the joints when moving into the
@@ -430,15 +460,17 @@ func (h *Hexapod) MainLoop() int {
 
 		default:
 			fmt.Println("unknown state!")
-			return 0
+			return
 		}
 
 		// Update the position of each foot
 		h.Sync(func() {
 			for i, leg := range h.Legs {
-				//pp := Vector3{feet[i].X - h.Position.X, feet[i].Y - h.Position.Y, feet[i].Z - h.Position.Z}
-				pp := feet[i].MultiplyByMatrix44(h.Local())
-				leg.SetGoal(pp)
+				if leg.Initialized {
+					//pp := Vector3{feet[i].X - h.Position.X, feet[i].Y - h.Position.Y, feet[i].Z - h.Position.Z}
+					pp := feet[i].MultiplyByMatrix44(h.Local())
+					leg.SetGoal(pp)
+				}
 			}
 		})
 
