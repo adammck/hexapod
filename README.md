@@ -29,4 +29,9 @@ To build and deploy a release:
 
 To power down:
 
-    bin/pi-shutdown
+    bin/pi-poweroff
+
+
+## License
+
+MIT

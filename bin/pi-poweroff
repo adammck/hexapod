@@ -1,0 +1,2 @@
+#!/bin/bash -e
+ssh -t root@hexapod.local poweroff
