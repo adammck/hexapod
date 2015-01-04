@@ -5,13 +5,16 @@ compared to some of the really fancy hexapods out there, but it's my first real
 hardware project, and I've learned a lot while putting it all together. It's a
 3d-printed skeleton bolted to a bunch of Dynamixel servos, powered by a
 [Raspberry Pi](http://www.raspberrypi.org) and manually controlled by a Sony
-Sixaxis controller. Each leg has 4DOF, which makes the gait quite flexible.  
-Here's a photo as of January 2015:
+Sixaxis controller. Each leg has 4DOF, which makes the gait quite flexible.
 
+Here's a photo (as of January 2015):  
 ![hexapod photo](http://cl.ly/image/3D2P1g0k1d21/hexapod-photo-20150104.jpg)
 
-And here's the SketchUp model it's printed from:
+GIF of it in action:  
+![hexapod standing up](https://i.imgur.com/YVEN3If.gif)  
+[More GIFs here](https://imgur.com/a/eXqIa). Actual video coming sooner or later.
 
+The SketchUp model it's printed from:  
 ![hexapod sketchup model](http://cl.ly/image/0c3p3h2R0N1R/hexapod-sketchup-20141125.png)
 
 
