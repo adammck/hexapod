@@ -14,9 +14,6 @@ GIF of it in action:
 ![hexapod standing up](https://i.imgur.com/YVEN3If.gif)  
 [More GIFs here](https://imgur.com/a/eXqIa). Actual video coming sooner or later.
 
-The SketchUp model it's printed from:  
-![hexapod sketchup model](http://cl.ly/image/0c3p3h2R0N1R/hexapod-sketchup-20141125.png)
-
 
 ## Hardware
 
