@@ -1,18 +1,16 @@
 # Adam's Hexapod
 
-This is the Go program which powers my hexapod. It's not terribly impressive
-compared to some of the really fancy hexapods out there, but it's my first real
-hardware project, and I've learned a lot while putting it all together. It's a
-3d-printed skeleton bolted to a bunch of Dynamixel servos, powered by a
-[Raspberry Pi](http://www.raspberrypi.org) and manually controlled by a Sony
-Sixaxis controller. Each leg has 4DOF, which makes the gait quite flexible.
+This is the Go program which powers my hexapod. It runs on a Raspberry Pi B+, and is controlled by a Sony Sixaxis (PS3) controller. The hexapod itself is 50cm in diameter, and about 2kg. The chassis was 3d-printed with a Printrbot Simple Metal, and bolted to 24 Dynamixel AX-12A servos. Each leg has 4DOF, which makes the gait quite flexible.
 
-Here's a photo (as of January 2015):  
+Here's it is, as of January 2015:
+
 ![hexapod photo](http://cl.ly/image/3D2P1g0k1d21/hexapod-photo-20150104.jpg)
 
-GIF of it in action:  
-![hexapod standing up](https://i.imgur.com/YVEN3If.gif)  
-[More GIFs here](https://imgur.com/a/eXqIa). Actual video coming sooner or later.
+And here's a GIF of it in action:
+
+![hexapod standing up](https://i.imgur.com/YVEN3If.gif)
+
+[More GIFs here](https://imgur.com/a/eXqIa). And [here's a video](https://vimeo.com/115932070).
 
 
 ## Hardware
