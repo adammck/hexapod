@@ -91,12 +91,12 @@ func NewHexapod(network *dynamixel.DynamixelNetwork) *Hexapod {
 			// Leg origins are relative to the hexapod origin, which is the X/Z
 			// center of the body, level with the bottom of the coxas (which
 			// protrude slightly below the body) on the Y axis.
-			NewLeg(network, 10, "FL", MakeVector3(-51.1769, 24, 98), -120), // Front Left  - 0
-			NewLeg(network, 20, "FR", MakeVector3(51.1769, 24, 98), -60),   // Front Right - 1
-			NewLeg(network, 30, "MR", MakeVector3(66, 24, 0), 0),           // Mid Right   - 2
-			NewLeg(network, 40, "BR", MakeVector3(51.1769, 24, -98), 60),   // Back Right  - 3
-			NewLeg(network, 50, "BL", MakeVector3(-51.1769, 24, -98), 120), // Back Left   - 4
-			NewLeg(network, 60, "ML", MakeVector3(-66, 24, 0), 180),        // Mid Left    - 5
+			NewLeg(network, 40, "FL", MakeVector3(-61.167, 24, 98), -120), // Front Left  - 0
+			NewLeg(network, 50, "FR", MakeVector3(61.167, 24, 98), -60),   // Front Right - 1
+			NewLeg(network, 60, "MR", MakeVector3(66, 24, 0), 1),          // Mid Right   - 2
+			NewLeg(network, 10, "BR", MakeVector3(61.167, 24, -98), 60),   // Back Right  - 3
+			NewLeg(network, 20, "BL", MakeVector3(-61.167, 24, -98), 120), // Back Left   - 4
+			NewLeg(network, 30, "ML", MakeVector3(-66, 24, 0), 180),       // Mid Left    - 5
 		},
 	}
 }
