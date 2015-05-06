@@ -3,33 +3,22 @@ package main
 import (
 	"flag"
 	"fmt"
-	"os"
-	"os/signal"
-	"syscall"
-	"os/exec"
 	"github.com/adammck/hexapod"
 	"github.com/adammck/sixaxis"
-	"runtime/pprof"
+	"os"
+	"os/exec"
+	"os/signal"
+	"syscall"
 	"time"
 )
 
 var (
-	portName   = flag.String("port", "/dev/ttyACM0", "the serial port path")
-	debug      = flag.Bool("debug", false, "show serial traffic")
-	cpuprofile = flag.String("cpuprofile", "", "write cpu profile to file")
+	portName = flag.String("port", "/dev/ttyACM0", "the serial port path")
+	debug    = flag.Bool("debug", false, "show serial traffic")
 )
 
 func main() {
 	flag.Parse()
-
-	if *cpuprofile != "" {
-		f, err := os.Create(*cpuprofile)
-		if err != nil {
-			fmt.Println(err)
-			os.Exit(1)
-		}
-		pprof.StartCPUProfile(f)
-	}
 
 	h, err := hexapod.NewHexapodFromPortName(*portName)
 	if err != nil {
@@ -76,12 +65,8 @@ func main() {
 		cmd := exec.Command("poweroff")
 		err := cmd.Run()
 		if err != nil {
-		  fmt.Println(err)
+			fmt.Println(err)
 		}
-	}
-
-	if *cpuprofile != "" {
-		pprof.StopCPUProfile()
 	}
 
 	fmt.Printf("Exit(%d)\n", code)
