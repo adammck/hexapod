@@ -1,8 +1,8 @@
 package legs
 
 import (
-	"testing"
 	"github.com/adammck/hexapod/math3d"
+	"testing"
 )
 
 func TestLegMatrix(t *testing.T) {

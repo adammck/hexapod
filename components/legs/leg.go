@@ -3,8 +3,8 @@ package legs
 import (
 	"fmt"
 	"github.com/adammck/dynamixel"
-	"github.com/adammck/hexapod/utils"
 	"github.com/adammck/hexapod/math3d"
+	"github.com/adammck/hexapod/utils"
 	"math"
 )
 

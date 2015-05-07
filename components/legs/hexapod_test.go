@@ -1,8 +1,8 @@
 package legs
 
 import (
-	"testing"
 	"github.com/adammck/hexapod/math3d"
+	"testing"
 )
 
 type Vector3 math3d.Vector3
