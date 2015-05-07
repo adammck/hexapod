@@ -285,63 +285,7 @@ func (l *Legs) needsMove() bool {
 
 func (l *Legs) Tick(now time.Time) error {
 	l.stateCounter += 1
-
-	// settings
-	//mov := 1.5
-
-	// The maximum speed to rotate (i.e. when the right stick is fully pressed)
-	// in degrees per loop.
-	//rotationSpeed := 0.8
-
-	//fmt.Printf("State=%s[%d]\n", h.State, h.stateCounter)
-
-	// // Rotate with the right stick
-	// if h.Controller.RightStick.X != 0 {
-	// 	h.Rotation += (float64(h.Controller.RightStick.X) / 127.0) * rotationSpeed
-	// }
-
-	// // How much the origin should move this frame. Default is zero, but this
-	// // it mutated (below) by the various buttons.
-	// vecMove := math3d.MakeVector3(0, 0, 0)
-
-	// if h.Controller.LeftStick.X != 0 {
-	// 	vecMove.X = (float64(h.Controller.LeftStick.X) / 127.0) * mov
-	// }
-
-	// if h.Controller.LeftStick.Y != 0 {
-	// 	vecMove.Z = (float64(-h.Controller.LeftStick.Y) / 127.0) * mov
-	// }
-
-	// // Move the origin up (away from the ground) with the dpad. This alters
-	// // the gait my keeping the body up in the air. It looks weird but works.
-	// if h.Controller.Up > 0 {
-	// 	h.baseClearance += 2
-	// }
-
-	// if h.Controller.Down > 0 {
-	// 	h.baseClearance -= 2
-	// }
-
-	// // Update the position, if it's changed.
-	// if !vecMove.Zero() {
-	// 	h.Position = vecMove.MultiplyByMatrix44(h.World())
-	// }
-
-	// dontMove = (h.Controller.Square > 0)
-
-	// // wat
-	// h.Position.Y = h.Clearance()
-
-	// // At any time, pressing select terminates. This can also be set from
-	// // another goroutine, to handle e.g. SIGTERM.
-	// if h.Controller.Start || h.Halt {
-	// 	if h.Controller.Select {
-	// 		exitCode = 1
-	// 	}
-	// 	if h.State != sSitDown && h.State != sHalt {
-	// 		h.SetState(sSitDown)
-	// 	}
-	// }
+	fmt.Printf("State=%s[%d]\n", l.State, l.stateCounter)
 
 	switch l.State {
 	case sDefault:

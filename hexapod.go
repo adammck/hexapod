@@ -16,6 +16,10 @@ type Hexapod struct {
 	//                 self-documenting than storing the heading as a float.
 	Position math3d.Vector3
 	Rotation float64
+
+	// Components can set this to true to indicate that the hex should shut down.
+	// TODO: Is this the same as returning an error from Tick()?
+	Shutdown bool
 }
 
 type Component interface {
