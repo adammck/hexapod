@@ -1,19 +1,19 @@
-package hexapod
+package legs
 
 import (
 	"fmt"
+	"github.com/adammck/hexapod/math3d"
 )
 
 type Segment struct {
 	Name   string
 	parent *Segment
 	Child  *Segment
-	Angles EulerAngles
-	vec    Vector3
+	Angles math3d.EulerAngles
+	vec    math3d.Vector3
 }
 
-func MakeSegment(name string, parent *Segment, angles EulerAngles, vec Vector3) *Segment {
-
+func MakeSegment(name string, parent *Segment, angles math3d.EulerAngles, vec math3d.Vector3) *Segment {
 	s := &Segment{
 		Name:   name,
 		parent: parent,
@@ -28,8 +28,8 @@ func MakeSegment(name string, parent *Segment, angles EulerAngles, vec Vector3) 
 	return s
 }
 
-func MakeRootSegment(vec Vector3) *Segment {
-	return MakeSegment("root", nil, EulerAngles{}, vec)
+func MakeRootSegment(vec math3d.Vector3) *Segment {
+	return MakeSegment("root", nil, math3d.EulerAngles{}, vec)
 }
 
 func (s Segment) String() string {
@@ -46,37 +46,37 @@ func (s Segment) String() string {
 
 // Start returns a vector3 with the coordinates of the start of this segment, in
 // the world coordiante space.
-func (s *Segment) Start() Vector3 {
-	return s.Project(ZeroVector3)
+func (s *Segment) Start() math3d.Vector3 {
+	return s.Project(math3d.ZeroVector3)
 }
 
 // Start returns a vector3 with the coordinates of the end of this segment, in
 // the world coordiante space.
-func (s *Segment) End() Vector3 {
+func (s *Segment) End() math3d.Vector3 {
 	return s.Project(s.vec)
 }
 
 // WorldMatrix returns a Matrix4 which can be applied to a vector in this
 // segment's coordinate space to convert it to the world space.
-func (s *Segment) WorldMatrix() *Matrix44 {
+func (s *Segment) WorldMatrix() *math3d.Matrix44 {
 
 	// if this segment has a parent, our transformation will start at the zero of
 	// that space, move by the vector (to the end of the segment), and rotate into
 	// this coordinate space.
 	if s.parent != nil {
-		m := MakeMatrix44(s.parent.vec, s.Angles)
-		return MultiplyMatrices(*m, *s.parent.WorldMatrix())
+		m := math3d.MakeMatrix44(s.parent.vec, s.Angles)
+		return math3d.MultiplyMatrices(*m, *s.parent.WorldMatrix())
 
 		// no parent means that this is a root segment, so the origin is zero, and
 		// transformations only need an angle.
 	} else {
-		return MakeMatrix44(ZeroVector3, s.Angles)
+		return math3d.MakeMatrix44(math3d.ZeroVector3, s.Angles)
 	}
 }
 
 // Project transforms a vector in this segment's coordinate space into a vector3
 // in the world space.
 // (pointer to a) new vector in the world space.
-func (s *Segment) Project(v Vector3) Vector3 {
+func (s *Segment) Project(v math3d.Vector3) math3d.Vector3 {
 	return v.MultiplyByMatrix44(*s.WorldMatrix())
 }

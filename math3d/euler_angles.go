@@ -1,7 +1,8 @@
-package hexapod
+package math3d
 
 import (
 	"fmt"
+	"github.com/adammck/hexapod/utils"
 )
 
 type EulerAngles struct {
@@ -27,13 +28,13 @@ func MakeSingularEulerAngle(rot rotation, angle float64) *EulerAngles {
 
 	switch rot {
 	case RotationHeading:
-		ea.Heading = rad(angle)
+		ea.Heading = utils.Rad(angle)
 
 	case RotationPitch:
-		ea.Pitch = rad(angle)
+		ea.Pitch = utils.Rad(angle)
 
 	case RotationBank:
-		ea.Bank = rad(angle)
+		ea.Bank = utils.Rad(angle)
 
 	default:
 		panic("invalid rotation")
@@ -48,5 +49,5 @@ func MakeEulerAngles(h float64, p float64, b float64) *EulerAngles {
 }
 
 func (ea EulerAngles) String() string {
-	return fmt.Sprintf("&Euler{h=%+.2f° p=%+.2f° b=%+.2f°}", deg(ea.Heading), deg(ea.Pitch), deg(ea.Bank))
+	return fmt.Sprintf("&Euler{h=%+.2f° p=%+.2f° b=%+.2f°}", utils.Deg(ea.Heading), utils.Deg(ea.Pitch), utils.Deg(ea.Bank))
 }

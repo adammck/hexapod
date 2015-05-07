@@ -1,11 +1,14 @@
-package hexapod
+package legs
 
 import (
 	"fmt"
 	"github.com/adammck/dynamixel"
+	"github.com/adammck/hexapod/utils"
+	"github.com/adammck/hexapod/math3d"
 	"github.com/adammck/sixaxis"
 	"github.com/jacobsa/go-serial/serial"
 	"math"
+	"strings"
 	"time"
 )
 
@@ -58,7 +61,7 @@ type Hexapod struct {
 	// TODO (adammck): Store the rotation as Euler angles, and modify the
 	//                 heading when rotating with L/R buttons. This is more
 	//                 self-documenting than storing the heading as a float.
-	Position Vector3
+	Position math3d.Vector3
 	Rotation float64
 
 	// The state that the hexapod is currently in.
@@ -82,7 +85,7 @@ type Hexapod struct {
 func NewHexapod(network *dynamixel.DynamixelNetwork) *Hexapod {
 	return &Hexapod{
 		Network:       network,
-		Position:      Vector3{0, 0, 0},
+		Position:      math3d.Vector3{0, 0, 0},
 		Rotation:      0.0,
 		State:         sDefault,
 		baseClearance: sitDownClearance,
@@ -91,12 +94,12 @@ func NewHexapod(network *dynamixel.DynamixelNetwork) *Hexapod {
 			// Leg origins are relative to the hexapod origin, which is the X/Z
 			// center of the body, level with the bottom of the coxas (which
 			// protrude slightly below the body) on the Y axis.
-			NewLeg(network, 40, "FL", MakeVector3(-61.167, 24, 98), -120), // Front Left  - 0
-			NewLeg(network, 50, "FR", MakeVector3(61.167, 24, 98), -60),   // Front Right - 1
-			NewLeg(network, 60, "MR", MakeVector3(66, 24, 0), 1),          // Mid Right   - 2
-			NewLeg(network, 10, "BR", MakeVector3(61.167, 24, -98), 60),   // Back Right  - 3
-			NewLeg(network, 20, "BL", MakeVector3(-61.167, 24, -98), 120), // Back Left   - 4
-			NewLeg(network, 30, "ML", MakeVector3(-66, 24, 0), 180),       // Mid Left    - 5
+			NewLeg(network, 40, "FL", math3d.MakeVector3(-61.167, 24, 98), -120), // Front Left  - 0
+			NewLeg(network, 50, "FR", math3d.MakeVector3(61.167, 24, 98), -60),   // Front Right - 1
+			NewLeg(network, 60, "MR", math3d.MakeVector3(66, 24, 0), 1),          // Mid Right   - 2
+			NewLeg(network, 10, "BR", math3d.MakeVector3(61.167, 24, -98), 60),   // Back Right  - 3
+			NewLeg(network, 20, "BL", math3d.MakeVector3(-61.167, 24, -98), 120), // Back Left   - 4
+			NewLeg(network, 30, "ML", math3d.MakeVector3(-66, 24, 0), 180),       // Mid Left    - 5
 		},
 	}
 }
@@ -120,17 +123,41 @@ func NewHexapodFromPortName(portName string) (*Hexapod, error) {
 	}
 
 	network := dynamixel.NewNetwork(serial)
-	flushErr := network.Flush()
-	if flushErr != nil {
-		return nil, flushErr
-	}
+	// flushErr := network.Flush()
+	// if flushErr != nil {
+	// 	return nil, flushErr
+	// }
 
 	hexapod := NewHexapod(network)
 	return hexapod, nil
 }
 
+// Ping checks that all servos are responding. This should be called immediately
+// after instantiating a hexapod, to avoid weird behavior later. Returns nil if
+// everything is responding, otherwise an error.
+func (h *Hexapod) Ping() error {
+	notResponding := make([]string, 0)
+
+	for _, leg := range h.Legs {
+		for _, servo := range leg.Servos() {
+			fmt.Printf("Pinging #%d\n", servo.Ident)
+			pingErr := servo.Ping()
+			if pingErr != nil {
+				notResponding = append(notResponding, string(servo.Ident))
+			}
+		}
+	}
+
+	if len(notResponding) != 0 {
+		strings.Join(notResponding, ", ")
+		return fmt.Errorf("servos not responding to ping: %s")
+	}
+
+	return nil
+}
+
 func (h *Hexapod) SetState(s State) {
-	fmt.Printf("State=%s\n", s)
+	//fmt.Printf("State=%s\n", s)
 	h.stateCounter = 0
 	h.stateTime = time.Now()
 	h.State = s
@@ -186,19 +213,19 @@ func (hexapod *Hexapod) SyncLegs(f func(leg *Leg)) {
 
 // homeFootPosition returns a vector in the WORLD coordinate space for the home
 // position of the given leg.
-func (h *Hexapod) homeFootPosition(leg *Leg) *Vector3 {
-	r := rad(h.Rotation + leg.Angle)
+func (h *Hexapod) homeFootPosition(leg *Leg) *math3d.Vector3 {
+	r := utils.Rad(h.Rotation + leg.Angle)
 	x := math.Cos(r) * stepRadius
 	z := -math.Sin(r) * stepRadius
-	return h.Position.Add(Vector3{x, h.stepDownPosition(), z})
+	return h.Position.Add(math3d.Vector3{x, h.stepDownPosition(), z})
 }
 
 // Projects a point in the World coordinate space into the coordinate space of
 // given leg (by its index). This method is on the Hexapod rather than the Leg,
 // to minimize the amount of state which we need to share with each leg.
-func (h *Hexapod) Project(legIndex int, vec Vector3) Vector3 {
+func (h *Hexapod) Project(legIndex int, vec math3d.Vector3) math3d.Vector3 {
 	hm := h.Legs[legIndex].Matrix()
-	wm := MultiplyMatrices(hm, h.Local())
+	wm := math3d.MultiplyMatrices(hm, h.Local())
 	return vec.MultiplyByMatrix44(*wm)
 }
 
@@ -229,14 +256,14 @@ func (h *Hexapod) CheckVoltage() error {
 
 // World returns a matrix to transform a vector in the hexapod coordinate space
 // into the world space.
-func (h *Hexapod) World() Matrix44 {
-	return *MakeMatrix44(h.Position, *MakeSingularEulerAngle(RotationHeading, h.Rotation))
+func (h *Hexapod) World() math3d.Matrix44 {
+	return *math3d.MakeMatrix44(h.Position, *math3d.MakeSingularEulerAngle(math3d.RotationHeading, h.Rotation))
 }
 
 // Local returns a matrix to transform a vector in the world coordinate space
 // into the hexapod's space, taking into account its current position and
 // rotation.
-func (h *Hexapod) Local() Matrix44 {
+func (h *Hexapod) Local() math3d.Matrix44 {
 	return h.World().Inverse()
 }
 
@@ -246,21 +273,21 @@ func (h *Hexapod) MainLoop() (exitCode int) {
 
 	// settings
 	legSetSize := 2
-	sleepTime := 10 * time.Millisecond
-	mov := 2.0
+	sleepTime := 5 * time.Millisecond
+	mov := 1.5
 	minStepDistance := 20.0
-	stepUpCount := 2
-	stepOverCount := 2
-	stepDownCount := 3
+	stepUpCount := 4
+	stepOverCount := 4
+	stepDownCount := 4
 
 	// The maximum speed to rotate (i.e. when the right stick is fully pressed)
 	// in degrees per loop.
-	rotationSpeed := 1.0
+	rotationSpeed := 0.8
 
 	// Foot positions in the WORLD coordinate space. We must store them in this
 	// space rather than the hexapod space, so they stay put when we move the
 	// origin around.
-	feet := [6]*Vector3{
+	feet := [6]*math3d.Vector3{
 		h.homeFootPosition(h.Legs[0]),
 		h.homeFootPosition(h.Legs[1]),
 		h.homeFootPosition(h.Legs[2]),
@@ -271,7 +298,7 @@ func (h *Hexapod) MainLoop() (exitCode int) {
 
 	// World positions of the NEXT foot position. These are nil if we're okay with
 	// where the foot is now, but are set when the foot should be relocated.
-	nextFeet := [6]*Vector3{
+	nextFeet := [6]*math3d.Vector3{
 		nil,
 		nil,
 		nil,
@@ -334,6 +361,21 @@ func (h *Hexapod) MainLoop() (exitCode int) {
 		}
 	}
 
+	// TODO (adammck): Move this to an actual method, once the feet targets are
+	//                 available to the object (they're just vars in this method
+	//                 right now).
+	needsMove := func() bool {
+		for i, _ := range h.Legs {
+			a := h.homeFootPosition(h.Legs[i])
+			a.Y = feet[i].Y
+			if feet[i].Distance(*a) > minStepDistance {
+				return true
+			}
+		}
+
+		return false
+	}
+
 	for {
 
 		h.stateCounter += 1
@@ -346,7 +388,7 @@ func (h *Hexapod) MainLoop() (exitCode int) {
 
 		// How much the origin should move this frame. Default is zero, but this
 		// it mutated (below) by the various buttons.
-		vecMove := MakeVector3(0, 0, 0)
+		vecMove := math3d.MakeVector3(0, 0, 0)
 
 		if h.Controller.LeftStick.X != 0 {
 			vecMove.X = (float64(h.Controller.LeftStick.X) / 127.0) * mov
@@ -383,6 +425,7 @@ func (h *Hexapod) MainLoop() (exitCode int) {
 			if err != nil {
 				fmt.Printf("halting due to: %s\n", err)
 				h.SetState(sHalt)
+				exitCode = 1
 			}
 		}
 
@@ -412,7 +455,7 @@ func (h *Hexapod) MainLoop() (exitCode int) {
 
 					for _, servo := range leg.Servos() {
 						servo.SetTorqueEnable(true)
-						servo.SetMovingSpeed(512)
+						servo.SetMovingSpeed(1024)
 					}
 
 					leg.Initialized = true
@@ -454,20 +497,8 @@ func (h *Hexapod) MainLoop() (exitCode int) {
 			}
 
 		case sStand:
-			if !dontMove {
-				needsMove := false
-
-				for i, _ := range h.Legs {
-					a := h.homeFootPosition(h.Legs[i])
-					a.Y = feet[i].Y
-					if feet[i].Distance(*a) > minStepDistance {
-						needsMove = true
-					}
-				}
-
-				if needsMove {
-					h.SetState(sStepUp)
-				}
+			if !dontMove && needsMove() {
+				h.SetState(sStepUp)
 			}
 
 		case sStepUp:
@@ -512,8 +543,16 @@ func (h *Hexapod) MainLoop() (exitCode int) {
 				sLegsIndex += 1
 
 				if sLegsIndex >= len(legSets) {
-					h.SetState(sStand)
 					sLegsIndex = 0
+
+					// If we still need to move, switch back to StepUp.
+					// Otherwise, stand still.
+					if needsMove() {
+						h.SetState(sStepUp)
+					} else {
+						h.SetState(sStand)
+					}
+
 				} else {
 					h.SetState(sStepUp)
 				}
@@ -528,7 +567,6 @@ func (h *Hexapod) MainLoop() (exitCode int) {
 		h.Sync(func() {
 			for i, leg := range h.Legs {
 				if leg.Initialized {
-					//pp := Vector3{feet[i].X - h.Position.X, feet[i].Y - h.Position.Y, feet[i].Z - h.Position.Z}
 					pp := feet[i].MultiplyByMatrix44(h.Local())
 					leg.SetGoal(pp)
 				}

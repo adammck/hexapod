@@ -1,8 +1,11 @@
-package hexapod
+package legs
 
 import (
 	"testing"
+	"github.com/adammck/hexapod/math3d"
 )
+
+type Vector3 math3d.Vector3
 
 type eg struct {
 	pos Vector3 // position

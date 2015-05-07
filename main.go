@@ -3,7 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/adammck/hexapod"
+	"github.com/adammck/hexapod/legs"
 	"github.com/adammck/sixaxis"
 	"os"
 	"os/exec"
@@ -20,7 +20,7 @@ var (
 func main() {
 	flag.Parse()
 
-	h, err := hexapod.NewHexapodFromPortName(*portName)
+	h, err := legs.NewHexapodFromPortName(*portName)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)

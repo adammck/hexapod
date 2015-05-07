@@ -1,4 +1,4 @@
-package hexapod
+package math3d
 
 import (
 	"fmt"
