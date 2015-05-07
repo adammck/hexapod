@@ -67,14 +67,22 @@ func main() {
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		for _ = range c {
-			fmt.Println("Halting")
-			//h.Halt = true
+			fmt.Println("Caught signal, shutting down...")
+			h.Shutdown = true
+		}
+	}()
 
-			// Keep looping for three seconds before quitting, to give everything time
-			// to shut down gracefully.
-			time.Sleep(3 * time.Second)
-			t.Stop()
-			os.Exit(2)
+	// Wait until h.Shutdown is true, then keep looping for three seconds, to give
+	// everything time to shut down gracefully. Then quit.
+	go func() {
+		for {
+			if h.Shutdown {
+				time.Sleep(3 * time.Second)
+				t.Stop()
+				os.Exit(2)	
+			}
+
+			time.Sleep(500 * time.Millisecond)
 		}
 	}()
 
@@ -83,17 +91,4 @@ func main() {
 	for now := range t.C {
 		h.Tick(now)
 	}
-
-	// code := h.MainLoop()
-	// if code == 1 {
-	// 	fmt.Println("Shutting down")
-	// 	cmd := exec.Command("poweroff")
-	// 	err := cmd.Run()
-	// 	if err != nil {
-	// 		fmt.Println(err)
-	// 	}
-	// }
-
-	// fmt.Printf("Exit(%d)\n", code)
-	// os.Exit(code)
 }
