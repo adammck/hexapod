@@ -77,8 +77,11 @@ func main() {
 	go func() {
 		for {
 			if h.Shutdown {
+				fmt.Println("Shutdown requested, waiting 3...")
 				time.Sleep(3 * time.Second)
 				t.Stop()
+
+				fmt.Println("Done waiting, shutting down...")
 				os.Exit(2)	
 			}
 

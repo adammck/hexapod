@@ -230,7 +230,7 @@ func (l *Legs) homeFootPosition(leg *Leg) *math3d.Vector3 {
 	r := utils.Rad(l.hexapod.Rotation + leg.Angle)
 	x := math.Cos(r) * stepRadius
 	z := -math.Sin(r) * stepRadius
-	return l.hexapod.Position.Add(math3d.Vector3{x, l.stepDownPosition(), z})
+	return l.hexapod.Position.Add(math3d.Vector3{x, 0, z})
 }
 
 // Projects a point in the World coordinate space into the coordinate space of
@@ -332,40 +332,46 @@ func (l *Legs) Tick(now time.Time) error {
 	// After initialzation, raise the clearance to lift the body off the
 	// ground, into the standing position.
 	case sStandUp:
-		l.baseClearance += 2
-		if l.baseClearance >= standUpClearance {
+		l.hexapod.Position.Y += 2
+		if l.hexapod.Position.Y >= standUpClearance {
 			l.SetState(sStand)
 		}
 
 	// Before halting, lower the clearance until the body is sitting on the
 	// ground.
 	case sSitDown:
-		l.baseClearance -= 2
-		if l.baseClearance <= sitDownClearance {
+		l.hexapod.Position.Y -= 2
+		if l.hexapod.Position.Y <= sitDownClearance {
 			l.SetState(sHalt)
 		}
 
 	case sStand:
-		if !l.dontMove && l.needsMove() {
+		if l.hexapod.Shutdown {
+			l.SetState(sSitDown)
+		} else if !l.dontMove && l.needsMove() {
 			l.SetState(sStepUp)
 		}
 
 	case sStepUp:
-		if l.stateCounter == 1 {
-			for _, ii := range l.legSet()[l.sLegsIndex] {
-				l.feet[ii].Y = l.stepUpPosition()
-			}
-		}
-
-		// TODO: Project the next step position, rather than just moving it home
-		//       every time. This will half (!!) the number of steps to move in a
-		//       constant direciton.
-		if l.stateCounter >= stepUpCount {
-			for _, ii := range l.legSet()[l.sLegsIndex] {
-				l.nextFeet[ii] = l.homeFootPosition(l.Legs[ii])
+		if l.hexapod.Shutdown {
+			l.SetState(sSitDown)
+		} else {
+			if l.stateCounter == 1 {
+				for _, ii := range l.legSet()[l.sLegsIndex] {
+					l.feet[ii].Y = l.stepUpPosition()
+				}
 			}
 
-			l.SetState(sStepOver)
+			// TODO: Project the next step position, rather than just moving it home
+			//       every time. This will half (!!) the number of steps to move in a
+			//       constant direciton.
+			if l.stateCounter >= stepUpCount {
+				for _, ii := range l.legSet()[l.sLegsIndex] {
+					l.nextFeet[ii] = l.homeFootPosition(l.Legs[ii])
+				}
+
+				l.SetState(sStepOver)
+			}
 		}
 
 	case sStepOver:
