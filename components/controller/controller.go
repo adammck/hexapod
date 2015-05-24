@@ -6,6 +6,7 @@ import (
 	"github.com/adammck/sixaxis"
 	"io"
 	"time"
+	"fmt"
 )
 
 const (
@@ -58,13 +59,13 @@ func (c *Controller) Tick(now time.Time) error {
 	}
 
 	// Move the origin up (away from the ground) with the dpad. This alters
-	// the gait my keeping the body up in the air. It looks weird but works.
+	// the gait by keeping the body up in the air. It looks weird but works.
 	if c.sa.Up > 0 {
-		//c.hex.baseClearance += 2
+		vecMove.Y = +2
 	}
 
 	if c.sa.Down > 0 {
-		//c.hex.baseClearance -= 2
+		vecMove.Y = -2
 	}
 
 	// Update the position, if it's changed.
@@ -74,11 +75,9 @@ func (c *Controller) Tick(now time.Time) error {
 
 	//dontMove = (c.sa.Square > 0)
 
-	// wat
-	//c.hex.Position.Y = c.hex.Clearance()
-
 	// At any time, pressing start shuts down the hex.
 	if c.sa.Start {
+		fmt.Println("Pressed START, shutting down")
 		c.hex.Shutdown = true
 	}
 
