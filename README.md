@@ -4,7 +4,7 @@ This is the Go program which powers my hexapod. It runs on a Raspberry Pi B+, an
 
 Here's it is, as of January 2015:
 
-![hexapod photo](http://cl.ly/image/3D2P1g0k1d21/hexapod-photo-20150104.jpg)
+![hexapod photo](http://i.imgur.com/h3j1Ojn.jpg)
 
 And here's a GIF of it in action:
 
