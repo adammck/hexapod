@@ -7,7 +7,6 @@ import (
 	"github.com/adammck/hexapod/math3d"
 	"github.com/adammck/hexapod/utils"
 	"math"
-	"strings"
 	"time"
 )
 
@@ -141,27 +140,28 @@ func New(h *hexapod.Hexapod, n *dynamixel.DynamixelNetwork) *Legs {
 
 // Boot pings all servos, and returns an error if any of them fail to respond.
 func (l *Legs) Boot() error {
-	notResponding := make([]string, 0)
 
+	// Don't bother sending ACKs for writes. We must do this first, to ensure that
+	// the servos are in the expected state before sending other commands.
+	for _, leg := range l.Legs {
+		for _, servo := range leg.Servos() {
+			setStatusErr := servo.SetStatusReturnLevel(1)
+			if setStatusErr != nil {
+				return fmt.Errorf("error while setting status return level of servo #%d: %s", servo.Ident, setStatusErr)
+			}
+
+			servo.Network.Flush()
+		}
+	}
+
+	// Ping all servos to ensure they're all alive.
 	for _, leg := range l.Legs {
 		for _, servo := range leg.Servos() {
 			fmt.Printf("Pinging #%d\n", servo.Ident)
 			pingErr := servo.Ping()
 			if pingErr != nil {
-				notResponding = append(notResponding, string(servo.Ident))
+				return fmt.Errorf("error while pinging servo #%d: %s", servo.Ident, pingErr)
 			}
-		}
-	}
-
-	if len(notResponding) != 0 {
-		strings.Join(notResponding, ", ")
-		return fmt.Errorf("servos not responding to ping: %s")
-	}
-
-	// Don't bother sending ACKs for writes.
-	for _, leg := range l.Legs {
-		for _, servo := range leg.Servos() {
-			servo.SetStatusReturnLevel(1)
 		}
 	}
 
@@ -230,7 +230,7 @@ func (l *Legs) homeFootPosition(leg *Leg) *math3d.Vector3 {
 	r := utils.Rad(l.hexapod.Rotation + leg.Angle)
 	x := math.Cos(r) * stepRadius
 	z := -math.Sin(r) * stepRadius
-	return l.hexapod.Position.Add(math3d.Vector3{x, 0, z})
+	return l.hexapod.Position.Add(math3d.Vector3{x, sitDownClearance, z})
 }
 
 // Projects a point in the World coordinate space into the coordinate space of
@@ -285,7 +285,6 @@ func (l *Legs) needsMove() bool {
 
 func (l *Legs) Tick(now time.Time) error {
 	l.stateCounter += 1
-	fmt.Printf("State=%s[%d]\n", l.State, l.stateCounter)
 
 	switch l.State {
 	case sDefault:
@@ -319,15 +318,15 @@ func (l *Legs) Tick(now time.Time) error {
 	// TODO: Remove this state? Maybe we should add a separate interface method
 	//       which is called when the parent wants to shut everything down.
 	case sHalt:
-		for _, leg := range l.Legs {
-			for _, servo := range leg.Servos() {
-				servo.SetStatusReturnLevel(2)
-				servo.SetTorqueEnable(false)
-				servo.SetLed(false)
+		if l.stateCounter == 1 {
+			for _, leg := range l.Legs {
+				for _, servo := range leg.Servos() {
+					servo.SetStatusReturnLevel(2)
+					servo.SetTorqueEnable(false)
+					servo.SetLed(false)
+				}
 			}
 		}
-
-		return fmt.Errorf("halted")
 
 	// After initialzation, raise the clearance to lift the body off the
 	// ground, into the standing position.
@@ -337,8 +336,7 @@ func (l *Legs) Tick(now time.Time) error {
 			l.SetState(sStand)
 		}
 
-	// Before halting, lower the clearance until the body is sitting on the
-	// ground.
+	// Lower the clearance until the body is sitting on the ground.
 	case sSitDown:
 		l.hexapod.Position.Y -= 2
 		if l.hexapod.Position.Y <= sitDownClearance {
@@ -417,15 +415,17 @@ func (l *Legs) Tick(now time.Time) error {
 		return fmt.Errorf("unknown state: %#v", l.State)
 	}
 
-	// Update the position of each foot
-	l.Sync(func() {
-		for i, leg := range l.Legs {
-			if leg.Initialized {
-				pp := l.feet[i].MultiplyByMatrix44(l.hexapod.Local())
-				leg.SetGoal(pp)
+	if l.State != sHalt {
+		// Update the position of each foot
+		l.Sync(func() {
+			for i, leg := range l.Legs {
+				if leg.Initialized {
+					pp := l.feet[i].MultiplyByMatrix44(l.hexapod.Local())
+					leg.SetGoal(pp)
+				}
 			}
-		}
-	})
+		})
+	}
 
 	return nil
 }

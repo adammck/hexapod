@@ -38,6 +38,7 @@ func main() {
 		fmt.Printf("error opening serial port: %s\n", err)
 		os.Exit(1)
 	}
+	defer serial.Close()
 
 	fmt.Println("Opening controller...")
 	f, err := os.Open("/dev/input/event0")
@@ -45,9 +46,11 @@ func main() {
 		fmt.Printf("error opening controller: %s\n", err)
 		os.Exit(1)
 	}
+	defer f.Close()
 
 	network := dynamixel.NewNetwork(serial)
 	network.Debug = *debug
+	network.Flush()
 	h := hexapod.NewHexapod(network)
 
 	fmt.Println("Creating components...")
@@ -56,7 +59,11 @@ func main() {
 	h.Add(controller.New(h, f))
 
 	fmt.Println("Booting components...")
-	h.Boot()
+	err = h.Boot()
+	if err != nil {
+		fmt.Printf("error while booting: %s\n", err)
+		os.Exit(1)
+	}
 
 	fmt.Println("Initializing loop...")
 	t := time.NewTicker(1 * time.Second / 60)
