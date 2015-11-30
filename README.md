@@ -48,7 +48,7 @@ And here's a GIF of it in action:
 
 5. Build and deploy:
 
-        bin/pi-deploy main.go
+        bin/pi-deploy main/main.go
 
    This requires Go to be installed with cross-compilation support for
    Linux/ARM. That's outside of the scope of this document, but it's easy.
