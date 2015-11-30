@@ -1,2 +1,2 @@
-#!/bin/bash -e
+#!/bin/bash -ex
 ssh -t root@hexapod.local journalctl -f
