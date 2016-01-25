@@ -2,7 +2,7 @@ package hexapod
 
 import (
 	"fmt"
-	"github.com/adammck/dynamixel"
+	"github.com/adammck/dynamixel/network"
 	"github.com/adammck/sixaxis"
 	"github.com/jacobsa/go-serial/serial"
 	"math"
@@ -23,7 +23,7 @@ const (
 )
 
 type Hexapod struct {
-	Network    *dynamixel.DynamixelNetwork
+	Network    *network.Network
 	Controller *sixaxis.SA
 
 	// The world coordinates of the center of the hexapod.
@@ -49,7 +49,7 @@ type Hexapod struct {
 }
 
 // NewHexapod creates a new Hexapod object on the given Dynamixel network.
-func NewHexapod(network *dynamixel.DynamixelNetwork) *Hexapod {
+func NewHexapod(network *network.Network) *Hexapod {
 	return &Hexapod{
 		Network:    network,
 		Position:   Vector3{0, 0, 0},
@@ -87,11 +87,8 @@ func NewHexapodFromPortName(portName string) (*Hexapod, error) {
 		return nil, openErr
 	}
 
-	network := dynamixel.NewNetwork(serial)
-	flushErr := network.Flush()
-	if flushErr != nil {
-		return nil, flushErr
-	}
+	network := network.New(serial)
+	network.Flush()
 
 	hexapod := NewHexapod(network)
 	return hexapod, nil
@@ -148,7 +145,7 @@ func (h *Hexapod) Project(legIndex int, vec Vector3) Vector3 {
 // NeedsVoltageCheck returns true if it's been a while since we checked the
 // voltage level. The timeout is pretty arbitrary.
 func (h *Hexapod) NeedsVoltageCheck() bool {
-	return time.Since(h.lastVoltageCheck) > 2 * time.Second
+	return time.Since(h.lastVoltageCheck) > 2*time.Second
 }
 
 // CheckVoltage fetches the voltage level of an arbitrary servo, and returns an
@@ -256,7 +253,6 @@ func (h *Hexapod) MainLoop() int {
 
 	for {
 
-
 		h.stateCounter += 1
 		//fmt.Printf("State=%s[%d]\n", h.State, h.stateCounter)
 
@@ -325,7 +321,7 @@ func (h *Hexapod) MainLoop() int {
 				for _, servo := range leg.Servos() {
 					servo.SetStatusReturnLevel(2)
 					servo.SetTorqueEnable(false)
-					servo.SetLed(false)
+					servo.SetLED(false)
 				}
 			}
 
@@ -466,7 +462,7 @@ func (hexapod *Hexapod) Relax() {
 	for _, leg := range hexapod.Legs {
 		for _, servo := range leg.Servos() {
 			servo.SetTorqueEnable(false)
-			servo.SetLed(false)
+			servo.SetLED(false)
 		}
 	}
 }

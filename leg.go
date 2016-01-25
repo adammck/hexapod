@@ -2,7 +2,9 @@ package hexapod
 
 import (
 	"fmt"
-	"github.com/adammck/dynamixel"
+	"github.com/adammck/dynamixel/network"
+	"github.com/adammck/dynamixel/servo"
+	"github.com/adammck/dynamixel/servo/ax"
 	"math"
 )
 
@@ -13,21 +15,41 @@ type Leg struct {
 	Angle float64
 
 	Name   string
-	Coxa   *dynamixel.DynamixelServo
-	Femur  *dynamixel.DynamixelServo
-	Tibia  *dynamixel.DynamixelServo
-	Tarsus *dynamixel.DynamixelServo
+	Coxa   *servo.Servo
+	Femur  *servo.Servo
+	Tibia  *servo.Servo
+	Tarsus *servo.Servo
 }
 
-func NewLeg(network *dynamixel.DynamixelNetwork, baseId int, name string, origin *Vector3, angle float64) *Leg {
+func NewLeg(network *network.Network, baseId int, name string, origin *Vector3, angle float64) *Leg {
+	coxa, err := ax.New(network, baseId+1)
+	if err != nil {
+		panic(err)
+	}
+
+	femur, err := ax.New(network, baseId+2)
+	if err != nil {
+		panic(err)
+	}
+
+	tibia, err := ax.New(network, baseId+3)
+	if err != nil {
+		panic(err)
+	}
+
+	tarsus, err := ax.New(network, baseId+4)
+	if err != nil {
+		panic(err)
+	}
+
 	return &Leg{
 		Origin: origin,
 		Angle:  angle,
 		Name:   name,
-		Coxa:   dynamixel.NewServo(network, uint8(baseId+1)),
-		Femur:  dynamixel.NewServo(network, uint8(baseId+2)),
-		Tibia:  dynamixel.NewServo(network, uint8(baseId+3)),
-		Tarsus: dynamixel.NewServo(network, uint8(baseId+4)),
+		Coxa:   coxa,
+		Femur:  femur,
+		Tibia:  tibia,
+		Tarsus: tarsus,
 	}
 }
 
@@ -38,8 +60,8 @@ func (leg *Leg) Matrix() Matrix44 {
 }
 
 // Servos returns an array of all servos attached to this leg.
-func (leg *Leg) Servos() [4]*dynamixel.DynamixelServo {
-	return [4]*dynamixel.DynamixelServo{
+func (leg *Leg) Servos() [4]*servo.Servo {
+	return [4]*servo.Servo{
 		leg.Coxa,
 		leg.Femur,
 		leg.Tibia,
@@ -49,7 +71,7 @@ func (leg *Leg) Servos() [4]*dynamixel.DynamixelServo {
 
 func (leg *Leg) SetLED(state bool) {
 	for _, s := range leg.Servos() {
-		s.SetLed(state)
+		s.SetLED(state)
 	}
 }
 
