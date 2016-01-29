@@ -2,7 +2,7 @@ package legs
 
 import (
 	"fmt"
-	"github.com/adammck/dynamixel"
+	"github.com/adammck/dynamixel/network"
 	"github.com/adammck/hexapod"
 	"github.com/adammck/hexapod/math3d"
 	"github.com/adammck/hexapod/utils"
@@ -61,7 +61,7 @@ const (
 
 type Legs struct {
 	hexapod *hexapod.Hexapod
-	Network *dynamixel.DynamixelNetwork
+	Network *network.Network
 
 	// The state that the legs are currently in.
 	State        State
@@ -105,7 +105,7 @@ type Legs struct {
 	sLegsIndex int
 }
 
-func New(h *hexapod.Hexapod, n *dynamixel.DynamixelNetwork) *Legs {
+func New(h *hexapod.Hexapod, n *network.Network) *Legs {
 	l := &Legs{
 		hexapod:       h,
 		Network:       n,
@@ -147,20 +147,18 @@ func (l *Legs) Boot() error {
 		for _, servo := range leg.Servos() {
 			setStatusErr := servo.SetStatusReturnLevel(1)
 			if setStatusErr != nil {
-				return fmt.Errorf("error while setting status return level of servo #%d: %s", servo.Ident, setStatusErr)
+				return fmt.Errorf("error while setting status return level of servo #%d: %s", servo.ServoID, setStatusErr)
 			}
-
-			servo.Network.Flush()
 		}
 	}
 
 	// Ping all servos to ensure they're all alive.
 	for _, leg := range l.Legs {
 		for _, servo := range leg.Servos() {
-			fmt.Printf("Pinging #%d\n", servo.Ident)
+			fmt.Printf("Pinging #%d\n", servo.ServoID)
 			pingErr := servo.Ping()
 			if pingErr != nil {
-				return fmt.Errorf("error while pinging servo #%d: %s", servo.Ident, pingErr)
+				return fmt.Errorf("error while pinging servo #%d: %s", servo.ServoID, pingErr)
 			}
 		}
 	}
@@ -323,7 +321,7 @@ func (l *Legs) Tick(now time.Time) error {
 				for _, servo := range leg.Servos() {
 					servo.SetStatusReturnLevel(2)
 					servo.SetTorqueEnable(false)
-					servo.SetLed(false)
+					servo.SetLED(false)
 				}
 			}
 		}

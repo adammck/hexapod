@@ -3,12 +3,13 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/adammck/dynamixel"
+	"github.com/adammck/dynamixel/network"
 	"github.com/adammck/hexapod"
 	"github.com/adammck/hexapod/components/controller"
 	"github.com/adammck/hexapod/components/legs"
+	"github.com/adammck/hexapod/components/voltage"
 	"github.com/jacobsa/go-serial/serial"
-	//"github.com/adammck/hexapod/components/voltage"
+	"io/ioutil"
 	"os"
 	"os/signal"
 	"syscall"
@@ -40,6 +41,13 @@ func main() {
 	}
 	defer serial.Close()
 
+	fmt.Println("Purging serial buffer...")
+	_, err = ioutil.ReadAll(serial)
+	if err != nil {
+		fmt.Printf("error purging serial buffer: %s\n", err)
+		os.Exit(1)
+	}
+
 	fmt.Println("Opening controller...")
 	f, err := os.Open("/dev/input/event0")
 	if err != nil {
@@ -48,14 +56,14 @@ func main() {
 	}
 	defer f.Close()
 
-	network := dynamixel.NewNetwork(serial)
+	network := network.New(serial)
 	network.Debug = *debug
-	network.Flush()
 	h := hexapod.NewHexapod(network)
 
 	fmt.Println("Creating components...")
-	h.Add(legs.New(h, network))
-	//h.Add(voltage.New())
+	l := legs.New(h, network)
+	h.Add(l)
+	h.Add(voltage.New(l.Legs[0].Coxa))
 	h.Add(controller.New(h, f))
 
 	fmt.Println("Booting components...")
@@ -89,7 +97,7 @@ func main() {
 				t.Stop()
 
 				fmt.Println("Done waiting, shutting down...")
-				os.Exit(2)	
+				os.Exit(2)
 			}
 
 			time.Sleep(500 * time.Millisecond)

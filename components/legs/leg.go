@@ -25,7 +25,7 @@ type Leg struct {
 	Angle float64
 }
 
-func NewLeg(network *network.Network, baseId int, name string, origin *Vector3, angle float64) *Leg {
+func NewLeg(network *network.Network, baseId int, name string, origin *math3d.Vector3, angle float64) *Leg {
 	coxa, err := ax.New(network, baseId+1)
 	if err != nil {
 		panic(err)

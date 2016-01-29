@@ -1,12 +1,8 @@
 package hexapod
 
 import (
-	"fmt"
 	"github.com/adammck/dynamixel/network"
 	"github.com/adammck/hexapod/math3d"
-	"github.com/adammck/sixaxis"
-	"github.com/jacobsa/go-serial/serial"
-	"math"
 	"time"
 )
 
@@ -63,30 +59,6 @@ func (h *Hexapod) Tick(now time.Time) {
 	for _, c := range h.Components {
 		c.Tick(now)
 	}
-}
-
-// NeedsVoltageCheck returns true if it's been a while since we checked the
-// voltage level. The timeout is pretty arbitrary.
-func (h *Hexapod) NeedsVoltageCheck() bool {
-	return time.Since(h.lastVoltageCheck) > 2*time.Second
-}
-
-// CheckVoltage fetches the voltage level of an arbitrary servo, and returns an
-// error if it's below 9.6v.
-func (h *Hexapod) CheckVoltage() error {
-	v, err := h.Legs[0].Coxa.Voltage()
-	h.lastVoltageCheck = time.Now()
-	if err != nil {
-		return err
-	}
-
-	fmt.Printf("voltage: %fv\n", v)
-
-	if v < 9.6 {
-		return fmt.Errorf("low voltage: %fv", v)
-	}
-
-	return nil
 }
 
 // World returns a matrix to transform a vector in the hexapod coordinate space

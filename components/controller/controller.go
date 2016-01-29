@@ -1,12 +1,12 @@
 package controller
 
 import (
+	"fmt"
 	"github.com/adammck/hexapod"
 	"github.com/adammck/hexapod/math3d"
 	"github.com/adammck/sixaxis"
 	"io"
 	"time"
-	"fmt"
 )
 
 const (
