@@ -30,7 +30,7 @@ func TestWorld(t *testing.T) {
 
 		actual := eg.vec.MultiplyByMatrix44(h.World())
 		if actual.Distance(eg.exp) > 0.000001 {
-			t.Errorf("Example #%d: got %s, expected: %s", i+1, actual, eg.exp)
+			t.Errorf("Example #%d: got %v, expected: %v", i+1, actual, eg.exp)
 		}
 	}
 }
@@ -52,7 +52,7 @@ func TestLocal(t *testing.T) {
 
 		actual := eg.vec.MultiplyByMatrix44(h.Local())
 		if actual.Distance(eg.exp) > 0.000001 {
-			t.Errorf("Example #%d: got %s, expected: %s", i+1, actual, eg.exp)
+			t.Errorf("Example #%d: got %v, expected: %v", i+1, actual, eg.exp)
 		}
 	}
 }

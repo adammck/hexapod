@@ -112,8 +112,8 @@ func (leg *Leg) SetGoal(p math3d.Vector3) {
 		panic("leg not initialized")
 	}
 
-	v := &math3d.Vector3{p.X, p.Y, p.Z}
-	vv := v.Add(math3d.Vector3{0, 64, 0})
+	v := &math3d.Vector3{X: p.X, Y: p.Y, Z: p.Z}
+	vv := v.Add(math3d.Vector3{X: 0, Y: 64, Z: 0})
 
 	// Solve the angle of the coxa by looking at the position of the target from
 	// above (x,z). It's the only joint which rotates around the Y axis, so we can

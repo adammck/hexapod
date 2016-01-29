@@ -32,7 +32,7 @@ func NewHexapod(network *network.Network) *Hexapod {
 	return &Hexapod{
 		Network:    network,
 		Components: []Component{},
-		Position:   math3d.Vector3{0, 0, 0},
+		Position:   math3d.Vector3{X: 0, Y: 0, Z: 0},
 		Rotation:   0.0,
 	}
 }

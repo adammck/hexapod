@@ -147,7 +147,7 @@ func (l *Legs) Boot() error {
 		for _, servo := range leg.Servos() {
 			setStatusErr := servo.SetStatusReturnLevel(1)
 			if setStatusErr != nil {
-				return fmt.Errorf("error while setting status return level of servo #%d: %s", servo.ServoID, setStatusErr)
+				return fmt.Errorf("error while setting status return level of servo #%d: %s", servo.ID, setStatusErr)
 			}
 		}
 	}
@@ -155,10 +155,10 @@ func (l *Legs) Boot() error {
 	// Ping all servos to ensure they're all alive.
 	for _, leg := range l.Legs {
 		for _, servo := range leg.Servos() {
-			fmt.Printf("Pinging #%d\n", servo.ServoID)
+			fmt.Printf("Pinging #%d\n", servo.ID)
 			pingErr := servo.Ping()
 			if pingErr != nil {
-				return fmt.Errorf("error while pinging servo #%d: %s", servo.ServoID, pingErr)
+				return fmt.Errorf("error while pinging servo #%d: %s", servo.ID, pingErr)
 			}
 		}
 	}
@@ -228,7 +228,7 @@ func (l *Legs) homeFootPosition(leg *Leg) *math3d.Vector3 {
 	r := utils.Rad(l.hexapod.Rotation + leg.Angle)
 	x := math.Cos(r) * stepRadius
 	z := -math.Sin(r) * stepRadius
-	return l.hexapod.Position.Add(math3d.Vector3{x, sitDownClearance, z})
+	return l.hexapod.Position.Add(math3d.Vector3{X: x, Y: sitDownClearance, Z: z})
 }
 
 // Projects a point in the World coordinate space into the coordinate space of

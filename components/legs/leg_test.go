@@ -32,7 +32,7 @@ func TestLegMatrix(t *testing.T) {
 		// dealing with floats, so can't be exact.
 		actual := eg.vec.MultiplyByMatrix44(leg.Matrix())
 		if actual.Distance(eg.exp) > 0.000001 {
-			t.Errorf("Example #%d: got %s, expected: %s", i+1, actual, eg.exp)
+			t.Errorf("Example #%d: got %v, expected: %v", i+1, actual, eg.exp)
 		}
 	}
 }
