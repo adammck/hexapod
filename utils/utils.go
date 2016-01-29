@@ -1,13 +1,13 @@
-package hexapod
+package utils
 
 import (
 	"math"
 )
 
-func deg(rads float64) float64 {
+func Deg(rads float64) float64 {
 	return rads / (math.Pi / 180)
 }
 
-func rad(degrees float64) float64 {
+func Rad(degrees float64) float64 {
 	return (math.Pi / 180) * degrees
 }

@@ -1,24 +1,28 @@
-package hexapod
+package legs
 
 import (
 	"fmt"
 	"github.com/adammck/dynamixel/network"
 	"github.com/adammck/dynamixel/servo"
 	"github.com/adammck/dynamixel/servo/ax"
+	"github.com/adammck/hexapod/math3d"
+	"github.com/adammck/hexapod/utils"
 	"math"
 )
 
 type Leg struct {
-	Origin *Vector3
-
-	// TODO: Rename this to 'Heading', since that's what it is
-	Angle float64
-
 	Name   string
+	Origin *math3d.Vector3
 	Coxa   *servo.Servo
 	Femur  *servo.Servo
 	Tibia  *servo.Servo
 	Tarsus *servo.Servo
+
+	// Has the leg been initialized yet? It can't be moved until it has.
+	Initialized bool
+
+	// TODO: Rename this to 'Heading', since that's what it is.
+	Angle float64
 }
 
 func NewLeg(network *network.Network, baseId int, name string, origin *Vector3, angle float64) *Leg {
@@ -55,8 +59,8 @@ func NewLeg(network *network.Network, baseId int, name string, origin *Vector3, 
 
 // Matrix returns a pointer to a 4x4 matrix, to transform a vector in the leg's
 // coordinate space into the parent (hexapod) space.
-func (leg *Leg) Matrix() Matrix44 {
-	return *MakeMatrix44(*leg.Origin, *MakeSingularEulerAngle(RotationHeading, leg.Angle))
+func (leg *Leg) Matrix() math3d.Matrix44 {
+	return *math3d.MakeMatrix44(*leg.Origin, *math3d.MakeSingularEulerAngle(math3d.RotationHeading, leg.Angle))
 }
 
 // Servos returns an array of all servos attached to this leg.
@@ -77,7 +81,7 @@ func (leg *Leg) SetLED(state bool) {
 
 // http://en.wikipedia.org/wiki/Solution_of_triangles#Three_sides_given_.28SSS.29
 func _sss(a float64, b float64, c float64) float64 {
-	return deg(math.Acos(((b * b) + (c * c) - (a * a)) / (2 * b * c)))
+	return utils.Deg(math.Acos(((b * b) + (c * c) - (a * a)) / (2 * b * c)))
 }
 
 func (leg *Leg) segments() (*Segment, *Segment, *Segment, *Segment) {
@@ -85,14 +89,14 @@ func (leg *Leg) segments() (*Segment, *Segment, *Segment, *Segment) {
 	// The position of the object in space must be specified by two segments. The
 	// first positions it, then the second (which is always zero-length) rotates
 	// it into the home orientation.
-	r1 := MakeRootSegment(*MakeVector3(leg.Origin.X, leg.Origin.Y, leg.Origin.Z))
-	r2 := MakeSegment("r2", r1, *MakeSingularEulerAngle(RotationHeading, leg.Angle), *MakeVector3(0, 0, 0))
+	r1 := MakeRootSegment(*math3d.MakeVector3(leg.Origin.X, leg.Origin.Y, leg.Origin.Z))
+	r2 := MakeSegment("r2", r1, *math3d.MakeSingularEulerAngle(math3d.RotationHeading, leg.Angle), *math3d.MakeVector3(0, 0, 0))
 
 	// Movable segments (angles in deg, vectors in mm)
-	coxa := MakeSegment("coxa", r2, *MakeSingularEulerAngle(RotationHeading, 40), *MakeVector3(39, -12, 0))
-	femur := MakeSegment("femur", coxa, *MakeSingularEulerAngle(RotationBank, 90), *MakeVector3(100, 0, 0))
-	tibia := MakeSegment("tibia", femur, *MakeSingularEulerAngle(RotationBank, 0), *MakeVector3(85, 0, 0))
-	tarsus := MakeSegment("tarsus", tibia, *MakeSingularEulerAngle(RotationBank, 90), *MakeVector3(76.5, 0, 0))
+	coxa := MakeSegment("coxa", r2, *math3d.MakeSingularEulerAngle(math3d.RotationHeading, 40), *math3d.MakeVector3(39, -12, 0))
+	femur := MakeSegment("femur", coxa, *math3d.MakeSingularEulerAngle(math3d.RotationBank, 90), *math3d.MakeVector3(100, 0, 0))
+	tibia := MakeSegment("tibia", femur, *math3d.MakeSingularEulerAngle(math3d.RotationBank, 0), *math3d.MakeVector3(85, 0, 0))
+	tarsus := MakeSegment("tarsus", tibia, *math3d.MakeSingularEulerAngle(math3d.RotationBank, 90), *math3d.MakeVector3(76.5, 0, 0))
 
 	// Return just the useful segments
 	return coxa, femur, tibia, tarsus
@@ -100,11 +104,16 @@ func (leg *Leg) segments() (*Segment, *Segment, *Segment, *Segment) {
 
 // Sets the goal position of this leg to the given x/y/z coordinates, relative
 // to the center of the hexapod.
-func (leg *Leg) SetGoal(p Vector3) {
+func (leg *Leg) SetGoal(p math3d.Vector3) {
 	_, femur, _, _ := leg.segments()
 
-	v := &Vector3{p.X, p.Y, p.Z}
-	vv := v.Add(Vector3{0, 64, 0})
+	// TODO (adammck): Return an error instead!
+	if !leg.Initialized {
+		panic("leg not initialized")
+	}
+
+	v := &math3d.Vector3{p.X, p.Y, p.Z}
+	vv := v.Add(math3d.Vector3{0, 64, 0})
 
 	// Solve the angle of the coxa by looking at the position of the target from
 	// above (x,z). It's the only joint which rotates around the Y axis, so we can
@@ -112,7 +121,7 @@ func (leg *Leg) SetGoal(p Vector3) {
 
 	adj := v.X - leg.Origin.X
 	opp := v.Z - leg.Origin.Z
-	theta := deg(math.Atan2(-opp, adj))
+	theta := utils.Deg(math.Atan2(-opp, adj))
 	coxaAngle := (theta - leg.Angle)
 
 	// Solve the other joints with a bunch of trig. Since we've already set the Y

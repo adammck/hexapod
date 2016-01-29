@@ -1,6 +1,7 @@
-package hexapod
+package legs
 
 import (
+	"github.com/adammck/hexapod/math3d"
 	"testing"
 )
 

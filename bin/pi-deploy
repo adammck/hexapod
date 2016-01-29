@@ -1,10 +1,16 @@
-#!/bin/bash -e
+#!/bin/bash -ex
 cd $(cd `dirname "$0"`; cd ..; pwd)
 
 USER=root
-HOST=hexapod
+HOST="hexapod.local"
 TMP=/tmp/bot
 DEST=/root/bot
+
+if [ $# != "1" ]; then
+  echo "Usage: $0 PACKAGE"
+  exit 1
+fi
+
 PKG=$1
 shift
 
