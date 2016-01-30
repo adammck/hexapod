@@ -61,10 +61,10 @@ func main() {
 	h := hexapod.NewHexapod(network)
 
 	fmt.Println("Creating components...")
-	l := legs.New(h, network)
+	l := legs.New(network)
 	h.Add(l)
 	h.Add(voltage.New(l.Legs[0].Coxa))
-	h.Add(controller.New(h, f))
+	h.Add(controller.New(f))
 
 	fmt.Println("Booting components...")
 	err = h.Boot()
@@ -83,7 +83,7 @@ func main() {
 	go func() {
 		for _ = range c {
 			fmt.Println("Caught signal, shutting down...")
-			h.Shutdown = true
+			h.State.Shutdown = true
 		}
 	}()
 
@@ -91,7 +91,7 @@ func main() {
 	// everything time to shut down gracefully. Then quit.
 	go func() {
 		for {
-			if h.Shutdown {
+			if h.State.Shutdown {
 				fmt.Println("Shutdown requested, waiting 3...")
 				time.Sleep(3 * time.Second)
 				t.Stop()
@@ -107,6 +107,9 @@ func main() {
 	// Run until START (bounce service) or SELECT+START (poweroff).
 	fmt.Println("Starting loop...")
 	for now := range t.C {
-		h.Tick(now)
+		err = h.Tick(now, h.State)
+		if err != nil {
+			panic(err)
+		}
 	}
 }

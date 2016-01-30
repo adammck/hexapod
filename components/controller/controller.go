@@ -21,14 +21,12 @@ const (
 )
 
 type Controller struct {
-	hex *hexapod.Hexapod
-	sa  *sixaxis.SA
+	sa *sixaxis.SA
 }
 
-func New(hex *hexapod.Hexapod, r io.Reader) *Controller {
+func New(r io.Reader) *Controller {
 	return &Controller{
-		hex: hex,
-		sa:  sixaxis.New(r),
+		sa: sixaxis.New(r),
 	}
 }
 
@@ -39,11 +37,11 @@ func (c *Controller) Boot() error {
 }
 
 // TODO: Update the state of the hexapod based on the state of the controller.
-func (c *Controller) Tick(now time.Time) error {
+func (c *Controller) Tick(now time.Time, state *hexapod.State) error {
 
 	// Rotate with the right stick
 	if c.sa.RightStick.X != 0 {
-		c.hex.Rotation += (float64(c.sa.RightStick.X) / 127.0) * rotationSpeed
+		state.TargetRotation += (float64(c.sa.RightStick.X) / 127.0) * rotationSpeed
 	}
 
 	// How much the origin should move this frame. Default is zero, but this
@@ -68,9 +66,10 @@ func (c *Controller) Tick(now time.Time) error {
 		vecMove.Y = -2
 	}
 
-	// Update the position, if it's changed.
+	// Update the target position, if it's changed.
 	if !vecMove.Zero() {
-		c.hex.Position = vecMove.MultiplyByMatrix44(c.hex.World())
+		mx := *math3d.MakeMatrix44(state.Position, *math3d.MakeSingularEulerAngle(math3d.RotationHeading, state.Rotation))
+		state.TargetPosition = vecMove.MultiplyByMatrix44(mx)
 	}
 
 	//dontMove = (c.sa.Square > 0)
@@ -78,7 +77,7 @@ func (c *Controller) Tick(now time.Time) error {
 	// At any time, pressing start shuts down the hex.
 	if c.sa.Start {
 		fmt.Println("Pressed START, shutting down")
-		c.hex.Shutdown = true
+		state.Shutdown = true
 	}
 
 	return nil

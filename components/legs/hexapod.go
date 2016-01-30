@@ -105,9 +105,8 @@ type Legs struct {
 	sLegsIndex int
 }
 
-func New(h *hexapod.Hexapod, n *network.Network) *Legs {
+func New(n *network.Network) *Legs {
 	l := &Legs{
-		hexapod:       h,
 		Network:       n,
 		State:         sDefault,
 		baseClearance: sitDownClearance,
@@ -126,13 +125,16 @@ func New(h *hexapod.Hexapod, n *network.Network) *Legs {
 		},
 	}
 
+	// TODO: We're initializing the position to zero here, but that prevents us
+	//       from settings the actual location of the hex at boot. Should we
+	//       provide the initial state to these constructors?
 	l.feet = [6]*math3d.Vector3{
-		l.homeFootPosition(l.Legs[0]),
-		l.homeFootPosition(l.Legs[1]),
-		l.homeFootPosition(l.Legs[2]),
-		l.homeFootPosition(l.Legs[3]),
-		l.homeFootPosition(l.Legs[4]),
-		l.homeFootPosition(l.Legs[5]),
+		l.homeFootPosition(l.Legs[0], math3d.ZeroVector3, 0),
+		l.homeFootPosition(l.Legs[1], math3d.ZeroVector3, 0),
+		l.homeFootPosition(l.Legs[2], math3d.ZeroVector3, 0),
+		l.homeFootPosition(l.Legs[3], math3d.ZeroVector3, 0),
+		l.homeFootPosition(l.Legs[4], math3d.ZeroVector3, 0),
+		l.homeFootPosition(l.Legs[5], math3d.ZeroVector3, 0),
 	}
 
 	return l
@@ -224,11 +226,11 @@ func (l *Legs) SyncLegs(f func(leg *Leg)) {
 
 // homeFootPosition returns a vector in the WORLD coordinate space for the home
 // position of the given leg.
-func (l *Legs) homeFootPosition(leg *Leg) *math3d.Vector3 {
-	r := utils.Rad(l.hexapod.Rotation + leg.Angle)
+func (l *Legs) homeFootPosition(leg *Leg, pos math3d.Vector3, rot float64) *math3d.Vector3 {
+	r := utils.Rad(rot + leg.Angle)
 	x := math.Cos(r) * stepRadius
 	z := -math.Sin(r) * stepRadius
-	return l.hexapod.Position.Add(math3d.Vector3{X: x, Y: sitDownClearance, Z: z})
+	return pos.Add(math3d.Vector3{X: x, Y: sitDownClearance, Z: z})
 }
 
 // Projects a point in the World coordinate space into the coordinate space of
@@ -269,9 +271,9 @@ func (l *Legs) legSet() [][]int {
 
 // Returns true if any of the feet are of sufficient distance from their desired
 // positions that we need to take a step.
-func (l *Legs) needsMove() bool {
+func (l *Legs) needsMove(pos math3d.Vector3, rot float64) bool {
 	for i, _ := range l.Legs {
-		a := l.homeFootPosition(l.Legs[i])
+		a := l.homeFootPosition(l.Legs[i], pos, rot)
 		a.Y = l.feet[i].Y
 		if l.feet[i].Distance(*a) > minStepDistance {
 			return true
@@ -281,7 +283,7 @@ func (l *Legs) needsMove() bool {
 	return false
 }
 
-func (l *Legs) Tick(now time.Time) error {
+func (l *Legs) Tick(now time.Time, state *hexapod.State) error {
 	l.stateCounter += 1
 
 	switch l.State {
@@ -329,27 +331,27 @@ func (l *Legs) Tick(now time.Time) error {
 	// After initialzation, raise the clearance to lift the body off the
 	// ground, into the standing position.
 	case sStandUp:
-		l.hexapod.Position.Y += 2
-		if l.hexapod.Position.Y >= standUpClearance {
+		state.Position.Y += 2
+		if state.Position.Y >= standUpClearance {
 			l.SetState(sStand)
 		}
 
 	// Lower the clearance until the body is sitting on the ground.
 	case sSitDown:
-		l.hexapod.Position.Y -= 2
-		if l.hexapod.Position.Y <= sitDownClearance {
+		state.Position.Y -= 2
+		if state.Position.Y <= sitDownClearance {
 			l.SetState(sHalt)
 		}
 
 	case sStand:
-		if l.hexapod.Shutdown {
+		if state.Shutdown {
 			l.SetState(sSitDown)
-		} else if !l.dontMove && l.needsMove() {
+		} else if !l.dontMove && l.needsMove(state.Position, state.Rotation) {
 			l.SetState(sStepUp)
 		}
 
 	case sStepUp:
-		if l.hexapod.Shutdown {
+		if state.Shutdown {
 			l.SetState(sSitDown)
 		} else {
 			if l.stateCounter == 1 {
@@ -363,7 +365,7 @@ func (l *Legs) Tick(now time.Time) error {
 			//       constant direciton.
 			if l.stateCounter >= stepUpCount {
 				for _, ii := range l.legSet()[l.sLegsIndex] {
-					l.nextFeet[ii] = l.homeFootPosition(l.Legs[ii])
+					l.nextFeet[ii] = l.homeFootPosition(l.Legs[ii], state.Position, state.Rotation)
 				}
 
 				l.SetState(sStepOver)
@@ -398,7 +400,7 @@ func (l *Legs) Tick(now time.Time) error {
 
 				// If we still need to move, switch back to StepUp.
 				// Otherwise, stand still.
-				if l.needsMove() {
+				if l.needsMove(state.Position, state.Rotation) {
 					l.SetState(sStepUp)
 				} else {
 					l.SetState(sStand)

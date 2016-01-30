@@ -2,6 +2,7 @@ package voltage
 
 import (
 	"fmt"
+	"github.com/adammck/hexapod"
 	"time"
 )
 
@@ -36,7 +37,7 @@ func (vc *VoltageCheck) Boot() error {
 	return nil
 }
 
-func (vc *VoltageCheck) Tick(now time.Time) error {
+func (vc *VoltageCheck) Tick(now time.Time, state *hexapod.State) error {
 	if vc.NeedsVoltageCheck() {
 		return vc.CheckVoltage()
 	}
