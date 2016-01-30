@@ -174,18 +174,6 @@ func (l *Legs) SetState(s State) {
 	l.State = s
 }
 
-// stepUpPosition returns the height (on the Y axis) which a foot should reach
-// when stepping up. This is generally static, but is increased while the L2
-// trigger is pressed. This is pretty handy for stepping over obstacles.
-func (l *Legs) stepUpPosition() float64 {
-	//return baseFootUp + ((float64(h.Controller.L2) / 255.0) * 100)
-	return baseFootUp
-}
-
-func (l *Legs) stepDownPosition() float64 {
-	return baseFootDown
-}
-
 // Clearance returns the distance (on the Y axis) which the body should be off
 // the ground. This is mostly constant, but can be increased temporarily by
 // pressing R2.
@@ -198,30 +186,6 @@ func (l *Legs) Clearance() float64 {
 // state. This is a pretty fragile and crappy way of synchronizing things.
 func (l *Legs) StateDuration() time.Duration {
 	return time.Since(l.stateTime)
-}
-
-//
-// Sync runs the given function while the network is in buffered mode, then
-// initiates any movements at once by sending ACTION.
-//
-func (l *Legs) Sync(f func()) {
-	l.Network.SetBuffered(true)
-	f()
-	l.Network.SetBuffered(false)
-	l.Network.Action()
-}
-
-//
-// SyncLegs runs the given function once for each leg while the network is in
-// buffered mode, then initiates movements with ACTION. This is useful when
-// resetting everything to a known state.
-//
-func (l *Legs) SyncLegs(f func(leg *Leg)) {
-	l.Sync(func() {
-		for _, leg := range l.Legs {
-			f(leg)
-		}
-	})
 }
 
 // homeFootPosition returns a vector in the WORLD coordinate space for the home
@@ -356,7 +320,7 @@ func (l *Legs) Tick(now time.Time, state *hexapod.State) error {
 		} else {
 			if l.stateCounter == 1 {
 				for _, ii := range l.legSet()[l.sLegsIndex] {
-					l.feet[ii].Y = l.stepUpPosition()
+					l.feet[ii].Y = baseFootUp
 				}
 			}
 
@@ -388,7 +352,7 @@ func (l *Legs) Tick(now time.Time, state *hexapod.State) error {
 	case sStepDown:
 		if l.stateCounter == 1 {
 			for _, ii := range l.legSet()[l.sLegsIndex] {
-				l.feet[ii].Y = l.stepDownPosition()
+				l.feet[ii].Y = baseFootDown
 			}
 		}
 
@@ -417,7 +381,7 @@ func (l *Legs) Tick(now time.Time, state *hexapod.State) error {
 
 	if l.State != sHalt {
 		// Update the position of each foot
-		l.Sync(func() {
+		utils.Sync(l.Network, func() {
 			for i, leg := range l.Legs {
 				if leg.Initialized {
 					pp := l.feet[i].MultiplyByMatrix44(l.hexapod.Local())
