@@ -2,13 +2,16 @@ package main
 
 import (
 	"flag"
-	"fmt"
+	log "github.com/Sirupsen/logrus"
 	"github.com/adammck/dynamixel/network"
 	"github.com/adammck/hexapod"
 	"github.com/adammck/hexapod/components/controller"
 	"github.com/adammck/hexapod/components/legs"
 	"github.com/adammck/hexapod/components/voltage"
+	fake_serial "github.com/adammck/hexapod/fake/serial"
+	fake_voltage "github.com/adammck/hexapod/fake/voltage"
 	"github.com/jacobsa/go-serial/serial"
+	"io"
 	"io/ioutil"
 	"os"
 	"os/signal"
@@ -18,11 +21,17 @@ import (
 
 var (
 	portName = flag.String("port", "/dev/ttyACM0", "the serial port path")
-	debug    = flag.Bool("debug", false, "show serial traffic")
+	debug    = flag.Bool("debug", false, "enable verbose logging")
+	offline  = flag.Bool("offline", false, "run in offline mode (with fake devices)")
 )
 
 func main() {
 	flag.Parse()
+	var err error
+
+	if *debug {
+		log.SetLevel(log.DebugLevel)
+	}
 
 	sOpts := serial.OpenOptions{
 		PortName:              *portName,
@@ -33,47 +42,66 @@ func main() {
 		InterCharacterTimeout: 100,
 	}
 
-	fmt.Println("Opening serial port...")
-	serial, err := serial.Open(sOpts)
-	if err != nil {
-		fmt.Printf("error opening serial port: %s\n", err)
-		os.Exit(1)
-	}
-	defer serial.Close()
+	var srl io.ReadWriteCloser
+	if *offline {
+		log.Warn("using fake serial port")
+		srl = &fake_serial.FakeSerial{}
 
-	fmt.Println("Purging serial buffer...")
-	_, err = ioutil.ReadAll(serial)
-	if err != nil {
-		fmt.Printf("error purging serial buffer: %s\n", err)
-		os.Exit(1)
+	} else {
+		log.Info("opening serial port")
+		srl, err := serial.Open(sOpts)
+		if err != nil {
+			log.Fatalf("error opening serial port: %s\n", err)
+		}
+		defer srl.Close()
+
+		log.Info("purging serial buffer")
+		_, err = ioutil.ReadAll(srl)
+		if err != nil {
+			log.Fatalf("error purging serial buffer: %s\n", err)
+		}
 	}
 
-	fmt.Println("Opening controller...")
-	f, err := os.Open("/dev/input/event0")
-	if err != nil {
-		fmt.Printf("error opening controller: %s\n", err)
-		os.Exit(1)
-	}
-	defer f.Close()
-
-	network := network.New(serial)
-	network.Debug = *debug
+	network := network.New(srl)
+	network.Timeout = 100 * time.Millisecond
 	h := hexapod.NewHexapod(network)
 
-	fmt.Println("Creating components...")
+	log.Info("creating components")
 	l := legs.New(network)
 	h.Add(l)
-	h.Add(voltage.New(l.Legs[0].Coxa))
+
+	var f *os.File
+	if *offline {
+		log.Warn("using fake controller")
+		f, _ = os.Open("/dev/null")
+		defer f.Close()
+
+	} else {
+		log.Info("opening controller")
+		f, err = os.Open("/dev/input/event0")
+		if err != nil {
+			log.Fatalf("error opening controller: %s", err)
+		}
+		defer f.Close()
+	}
 	h.Add(controller.New(f))
 
-	fmt.Println("Booting components...")
+	var v voltage.HasVoltage
+	if *offline {
+		log.Warn("using fake voltage check")
+		v = fake_voltage.New(9.6)
+	} else {
+		v = l.Legs[0].Coxa
+	}
+	h.Add(voltage.New(v))
+
+	log.Info("booting components")
 	err = h.Boot()
 	if err != nil {
-		fmt.Printf("error while booting: %s\n", err)
-		os.Exit(1)
+		log.Fatalf("error while booting: %s", err)
 	}
 
-	fmt.Println("Initializing loop...")
+	log.Info("initializing loop")
 	t := time.NewTicker(1 * time.Second / 60)
 
 	// Catch both SIGINT (ctrl+c) and SIGTERM (kill/systemd), to allow the hexapod
@@ -82,7 +110,7 @@ func main() {
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		for _ = range c {
-			fmt.Println("Caught signal, shutting down...")
+			log.Warn("caught signal, shutting down...")
 			h.State.Shutdown = true
 		}
 	}()
@@ -92,12 +120,12 @@ func main() {
 	go func() {
 		for {
 			if h.State.Shutdown {
-				fmt.Println("Shutdown requested, waiting 3...")
+				log.Warn("shutdown requested, waiting 3 seconds...")
 				time.Sleep(3 * time.Second)
 				t.Stop()
 
-				fmt.Println("Done waiting, shutting down...")
-				os.Exit(2)
+				log.Warn("done waiting, exiting")
+				os.Exit(1)
 			}
 
 			time.Sleep(500 * time.Millisecond)
@@ -105,11 +133,12 @@ func main() {
 	}()
 
 	// Run until START (bounce service) or SELECT+START (poweroff).
-	fmt.Println("Starting loop...")
+	log.Info("starting loop")
 	for now := range t.C {
 		err = h.Tick(now, h.State)
 		if err != nil {
-			panic(err)
+			log.Error(err)
+			os.Exit(1)
 		}
 	}
 }

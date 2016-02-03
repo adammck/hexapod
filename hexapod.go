@@ -1,6 +1,7 @@
 package hexapod
 
 import (
+	"fmt"
 	"github.com/adammck/dynamixel/network"
 	"github.com/adammck/hexapod/math3d"
 	"time"
@@ -75,7 +76,7 @@ func (h *Hexapod) Tick(now time.Time, state *State) error {
 	for _, c := range h.Components {
 		err := c.Tick(now, state)
 		if err != nil {
-			return err
+			return fmt.Errorf("%T.Tick returned error: %v", c, err)
 		}
 	}
 

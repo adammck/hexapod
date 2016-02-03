@@ -1,10 +1,14 @@
 package voltage
 
 import (
-	"fmt"
+	log "github.com/Sirupsen/logrus"
 	"github.com/adammck/hexapod"
 	"time"
 )
+
+var logger = log.WithFields(log.Fields{
+	"pkg": "voltage",
+})
 
 const (
 
@@ -26,10 +30,10 @@ type VoltageCheck struct {
 	HasVoltage
 }
 
-func New(servo HasVoltage) *VoltageCheck {
+func New(hv HasVoltage) *VoltageCheck {
 	return &VoltageCheck{
 		time.Time{},
-		servo,
+		hv,
 	}
 }
 
@@ -38,7 +42,7 @@ func (vc *VoltageCheck) Boot() error {
 }
 
 func (vc *VoltageCheck) Tick(now time.Time, state *hexapod.State) error {
-	if vc.NeedsVoltageCheck() {
+	if !state.Shutdown && vc.NeedsVoltageCheck() {
 		return vc.CheckVoltage()
 	}
 
@@ -61,10 +65,10 @@ func (vc *VoltageCheck) CheckVoltage() error {
 		return err
 	}
 
-	fmt.Printf("voltage: %.2fv\n", val)
-
 	if val < minimum {
-		return fmt.Errorf("low voltage: %.2fv", val)
+		logger.Warnf("low voltage: %.2fv", val)
+	} else {
+		logger.Infof("voltage: %.2fv", val)
 	}
 
 	return nil

@@ -72,8 +72,6 @@ func (c *Controller) Tick(now time.Time, state *hexapod.State) error {
 		state.TargetPosition = vecMove.MultiplyByMatrix44(mx)
 	}
 
-	//dontMove = (c.sa.Square > 0)
-
 	// At any time, pressing start shuts down the hex.
 	if c.sa.Start {
 		fmt.Println("Pressed START, shutting down")
