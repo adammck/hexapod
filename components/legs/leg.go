@@ -1,7 +1,7 @@
 package legs
 
 import (
-	"fmt"
+	"github.com/Sirupsen/logrus"
 	"github.com/adammck/dynamixel/network"
 	"github.com/adammck/dynamixel/servo"
 	"github.com/adammck/dynamixel/servo/ax"
@@ -159,9 +159,36 @@ func (leg *Leg) SetGoal(p math3d.Vector3) {
 	// fmt.Printf("tibiaAngle=%0.4f (s/o=%0.4f) (s/v=%0.4f) (e/o=%0.4f) (e/v=%0.4f)\n", tibiaAngle, tibia.Start().Distance(ik.ZeroVector3), tibia.Start().Distance(*v), tibia.End().Distance(ik.ZeroVector3), tibia.End().Distance(*v))
 	// fmt.Printf("tarsusAngle=%0.4f (s/o=%0.4f) (s/v=%0.4f) (e/o=%0.4f) (e/v=%0.4f)\n", tarsusAngle, tarsus.Start().Distance(ik.ZeroVector3), tarsus.Start().Distance(*v), tarsus.End().Distance(ik.ZeroVector3), tarsus.End().Distance(*v))
 
-	if math.IsNaN(coxaAngle) || math.IsNaN(femurAngle) || math.IsNaN(tibiaAngle) || math.IsNaN(tarsusAngle) {
-		fmt.Println("ERROR")
-		return
+	//logrus.Infof("%s coxa=%0.2f, femur=%0.2f, tibia=%0.2f, tarsus=%0.2f", leg.Name, coxaAngle, femurAngle, tibiaAngle, tarsusAngle)
+
+	err := false
+
+	if math.IsNaN(coxaAngle) {
+		logrus.Errorf("invalid %s coxa angle: %0.2f", leg.Name, coxaAngle)
+		err = true
+	}
+
+	if math.IsNaN(femurAngle) {
+		logrus.Errorf("invalid %s femur angle: %0.2f", leg.Name, femurAngle)
+		err = true
+	}
+
+	if math.IsNaN(tibiaAngle) {
+		logrus.Errorf("invalid %s tibia angle: %0.2f", leg.Name, tibiaAngle)
+		err = true
+	}
+
+	if math.IsNaN(tarsusAngle) {
+		logrus.Errorf("invalid %s tarsus angle: %0.2f", leg.Name, tarsusAngle)
+		err = true
+	}
+
+	// Dump a bunch of debugging info and crash if anything went wrong. This is
+	// of course way too hasty, but handy for now.
+	if err {
+		logrus.Errorf("a=%0.2f, b=%0.2f, c=%0.2f, d=%0.2f, e=%0.2f, f=%0.2f, g=%0.2f", a, b, c, d, e, f, g)
+		logrus.Errorf("aa=%0.2f, bb=%0.2f, cc=%0.2f, dd=%0.2f, ee=%0.2f, hh=%0.2f", aa, bb, cc, dd, ee, hh)
+		panic("goal out of range")
 	}
 
 	leg.Coxa.MoveTo(coxaAngle)

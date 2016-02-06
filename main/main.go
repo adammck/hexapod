@@ -110,8 +110,10 @@ func main() {
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		for _ = range c {
-			log.Warn("caught signal, shutting down...")
-			h.State.Shutdown = true
+			if !h.State.Shutdown {
+				log.Warn("caught signal, requesting shutdown...")
+				h.State.Shutdown = true
+			}
 		}
 	}()
 
@@ -120,8 +122,9 @@ func main() {
 	go func() {
 		for {
 			if h.State.Shutdown {
-				log.Warn("shutdown requested, waiting 3 seconds...")
-				time.Sleep(3 * time.Second)
+				gracePeriod := 2000 * time.Millisecond
+				log.Warnf("shutdown requested, waiting %s...", gracePeriod)
+				time.Sleep(gracePeriod)
 				t.Stop()
 
 				log.Warn("done waiting, exiting")
@@ -135,7 +138,10 @@ func main() {
 	// Run until START (bounce service) or SELECT+START (poweroff).
 	log.Info("starting loop")
 	for now := range t.C {
+
+		//log.Info("tick")
 		err = h.Tick(now, h.State)
+
 		if err != nil {
 			log.Error(err)
 			os.Exit(1)

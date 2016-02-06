@@ -30,6 +30,18 @@ type State struct {
 	TargetRotation float64
 }
 
+// World returns a matrix to transform a vector in the coordinate space defined
+// by the Position and Rotation attributes into the world space.
+func (s *State) World() math3d.Matrix44 {
+	return *math3d.MakeMatrix44(s.Position, *math3d.MakeSingularEulerAngle(math3d.RotationHeading, s.Rotation))
+}
+
+// Local returns a matrix to transform a vector in the world coordinate space
+// into the space defined by the state (using the Position and Rotation attrs).
+func (s *State) Local() math3d.Matrix44 {
+	return s.World().Inverse()
+}
+
 type Hexapod struct {
 	Network    *network.Network
 	Components []Component
@@ -50,7 +62,10 @@ func NewHexapod(network *network.Network) *Hexapod {
 	return &Hexapod{
 		Network:    network,
 		Components: []Component{},
-		State:      &State{},
+		State: &State{
+			Position:       math3d.ZeroVector3,
+			TargetPosition: math3d.ZeroVector3,
+		},
 	}
 }
 
@@ -81,17 +96,4 @@ func (h *Hexapod) Tick(now time.Time, state *State) error {
 	}
 
 	return nil
-}
-
-// World returns a matrix to transform a vector in the hexapod coordinate space
-// into the world space.
-func (h *Hexapod) World() math3d.Matrix44 {
-	return *math3d.MakeMatrix44(h.State.Position, *math3d.MakeSingularEulerAngle(math3d.RotationHeading, h.State.Rotation))
-}
-
-// Local returns a matrix to transform a vector in the world coordinate space
-// into the hexapod's space, taking into account its current position and
-// rotation.
-func (h *Hexapod) Local() math3d.Matrix44 {
-	return h.World().Inverse()
 }

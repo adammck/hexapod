@@ -2,12 +2,14 @@ package legs
 
 import (
 	"fmt"
+	"math"
+	"time"
+
+	"github.com/Sirupsen/logrus"
 	"github.com/adammck/dynamixel/network"
 	"github.com/adammck/hexapod"
 	"github.com/adammck/hexapod/math3d"
 	"github.com/adammck/hexapod/utils"
-	"math"
-	"time"
 )
 
 type State string
@@ -18,10 +20,8 @@ const (
 	sHalt     State = "sHalt"
 	sStandUp  State = "sStandUp"
 	sSitDown  State = "sSitDown"
-	sStand    State = "sStand"
-	sStepUp   State = "sStepUp"
-	sStepOver State = "sStepOver"
-	sStepDown State = "sStepDown"
+	sStanding State = "sStanding"
+	sStepping State = "sStepping"
 
 	// The offset (on the Y axis) which feet should be moved to on the up step,
 	// relative to the origin.
@@ -41,26 +41,31 @@ const (
 	// very few valid settings.
 	stepRadius = 220.0
 
-	// The number of legs to move at once.
-	legSetSize = 2
-
 	// Minimum distance which the desired foot position should be from its actual
 	// position before a step should be taken to correct it.
 	minStepDistance = 20.0
 
-	// The number of ticks which should be spent in each state.
-	// TODO: Replace these with durations, ticks are variable now.
-	stepUpCount   = 4
-	stepOverCount = 4
-	stepDownCount = 4
-
 	// The time (in seconds) between each leg initialization. This should be as
 	// low as possible, since it delays startup.
 	initInterval = 0.25
+
+	// The number of ticks per step, i.e. a single foot is lifted, moved to its
+	// new position, and put down.
+	ticksPerStep = 60
+
+	// The number of ticks per step cycle, i.e. all legs have made a single
+	// step, and returned to their original positions.
+	ticksPerStepCycle = 240
+
+	// The distance (in mm) which the hex can move per step cycle. Since each
+	// foot only moves once per cycle, this could also be named stepDistance.
+	stepCycleDistance = 80.0
+
+	// Calc
+	moveDistancePerTick = stepCycleDistance / ticksPerStepCycle
 )
 
 type Legs struct {
-	hexapod *hexapod.Hexapod
 	Network *network.Network
 
 	// The state that the legs are currently in.
@@ -74,35 +79,83 @@ type Legs struct {
 	// ???
 	baseClearance float64
 
-	// The order in which legs are initialized at startup. We start them one at
-	// a time, rather than all at once, to reduce the load on the power supply.
-	// When starting them all at once, quite often, the voltage drops low enough
-	// to reset the RPi.
-	//
-	// TODO: This probably isn't the case any more, now that I have a proper power
-	//       supply. Remove this?
-	//
-	initOrder []int
+	// The position (copied from the state) at the start of the current step
+	// cycle. We keep track of this (in addition to the actual current position)
+	// to avoid changing the target position mid-cycle.
+	lastPosition math3d.Vector3
+
+	// Target position at the end of the next step cycle. This is encapsulated
+	// here (rather than in the state) because it's an implementation detail.
+	nextTarget math3d.Vector3
 
 	// Last known foot positions in the WORLD coordinate space. We must store them
 	// in this space rather than the hexapod space, so they stay put when we move
 	// the origin around.
 	feet [6]*math3d.Vector3
 
+	// Foot positions at the start of current step cycle.
+	lastFeet [6]math3d.Vector3
+
 	// World positions of the NEXT foot position. These are nil if we're okay with
 	// where the foot is now, but are set when the foot should be relocated.
 	nextFeet [6]*math3d.Vector3
 
-	// Whether the hexapod should be prevented from moving its feet. It can't
-	// walk when this is enable, only lean, so this is only useful for testing.
-	dontMove bool
-
 	// The count (not index!) of the leg which we're currently initializing.
 	// When it reaches six, we've finished initialzing.
 	initCounter int
+}
 
-	// Which legset are we currently stepping?
-	sLegsIndex int
+var log = logrus.WithFields(logrus.Fields{
+	"pkg": "legs",
+})
+
+// stepHeights contains the Y position of each foot, at each tick. This is
+// computed at startup and repeated while stepping.
+var stepHeights [6][]float64
+
+// Ratios of start->end position for both X/Z.
+var stepMoves [6][]float64
+
+func init() {
+	p := ticksPerStepCycle / 4.0
+
+	// TODO: Encapsulate this, along with the other curve properties, into some
+	//       sort of Gait object, to make them pluggable.
+	stepCurveCenter := [6]float64{
+		0: p,
+		1: p * 3,
+		2: p,
+		3: p * 3,
+		4: p,
+		5: p * 3,
+	}
+
+	for i := 0; i < 6; i += 1 {
+		y := make([]float64, ticksPerStepCycle)
+		xz := make([]float64, ticksPerStepCycle)
+
+		for ii := 0; ii < ticksPerStepCycle; ii += 1 {
+			fii := float64(ii)
+
+			// Step height is a bell curve
+			y[ii] = baseFootUp * math.Pow(2, -math.Pow((fii-stepCurveCenter[i])*((math.E*2)/ticksPerStep), 2))
+
+			// Step movement ratio is a sine from 0 to 1
+			if fii < (stepCurveCenter[i] - ticksPerStep/2) {
+				xz[ii] = 0.0
+
+			} else if fii > (stepCurveCenter[i] + ticksPerStep/2) {
+				xz[ii] = 1.0
+
+			} else {
+				x := (fii - (stepCurveCenter[i] - ticksPerStep/2)) / ticksPerStep
+				xz[ii] = 0.5 - (math.Cos(x*math.Pi) / 2)
+			}
+		}
+
+		stepHeights[i] = y
+		stepMoves[i] = xz
+	}
 }
 
 func New(n *network.Network) *Legs {
@@ -110,7 +163,6 @@ func New(n *network.Network) *Legs {
 		Network:       n,
 		State:         sDefault,
 		baseClearance: sitDownClearance,
-		initOrder:     []int{0, 3, 1, 4, 2, 5},
 		Legs: [6]*Leg{
 
 			// Leg origins are relative to the hexapod origin, which is the X/Z
@@ -118,10 +170,10 @@ func New(n *network.Network) *Legs {
 			// protrude slightly below the body) on the Y axis.
 			NewLeg(n, 40, "FL", math3d.MakeVector3(-61.167, 24, 98), -120), // Front Left  - 0
 			NewLeg(n, 50, "FR", math3d.MakeVector3(61.167, 24, 98), -60),   // Front Right - 1
-			NewLeg(n, 60, "MR", math3d.MakeVector3(66, 24, 0), 1),          // Mid Right   - 2
+			NewLeg(n, 60, "MR", math3d.MakeVector3(66, 24, 0), 0),          // Mid Right   - 2
 			NewLeg(n, 10, "BR", math3d.MakeVector3(61.167, 24, -98), 60),   // Back Right  - 3
 			NewLeg(n, 20, "BL", math3d.MakeVector3(-61.167, 24, -98), 120), // Back Left   - 4
-			NewLeg(n, 30, "ML", math3d.MakeVector3(-66, 24, 0), 180),       // Mid Left    - 5
+			NewLeg(n, 30, "ML", math3d.MakeVector3(-66, 24, 0), 179),       // Mid Left    - 5
 		},
 	}
 
@@ -135,6 +187,10 @@ func New(n *network.Network) *Legs {
 		l.homeFootPosition(l.Legs[3], math3d.ZeroVector3, 0),
 		l.homeFootPosition(l.Legs[4], math3d.ZeroVector3, 0),
 		l.homeFootPosition(l.Legs[5], math3d.ZeroVector3, 0),
+	}
+
+	for i, _ := range l.feet {
+		l.lastFeet[i] = *l.feet[i]
 	}
 
 	return l
@@ -157,7 +213,7 @@ func (l *Legs) Boot() error {
 	// Ping all servos to ensure they're all alive.
 	for _, leg := range l.Legs {
 		for _, servo := range leg.Servos() {
-			fmt.Printf("Pinging #%d\n", servo.ID)
+			log.Infof("pinging servo #%d", servo.ID)
 			pingErr := servo.Ping()
 			if pingErr != nil {
 				return fmt.Errorf("error while pinging servo #%d: %s", servo.ID, pingErr)
@@ -165,10 +221,21 @@ func (l *Legs) Boot() error {
 		}
 	}
 
+	// Initialize each servo.
+	for _, leg := range l.Legs {
+		for _, servo := range leg.Servos() {
+			servo.SetTorqueEnable(true)
+			servo.SetMovingSpeed(1024)
+		}
+
+		leg.Initialized = true
+	}
+
 	return nil
 }
 
 func (l *Legs) SetState(s State) {
+	log.Infof("state=%v", s)
 	l.stateCounter = 0
 	l.stateTime = time.Now()
 	l.State = s
@@ -178,7 +245,6 @@ func (l *Legs) SetState(s State) {
 // the ground. This is mostly constant, but can be increased temporarily by
 // pressing R2.
 func (l *Legs) Clearance() float64 {
-	//return h.baseClearance + ((float64(h.Controller.R2) / 255.0) * 100)
 	return l.baseClearance
 }
 
@@ -197,87 +263,12 @@ func (l *Legs) homeFootPosition(leg *Leg, pos math3d.Vector3, rot float64) *math
 	return pos.Add(math3d.Vector3{X: x, Y: sitDownClearance, Z: z})
 }
 
-// Projects a point in the World coordinate space into the coordinate space of
-// given leg (by its index). This method is on the Hexapod rather than the Leg,
-// to minimize the amount of state which we need to share with each leg.
-func (l *Legs) Project(legIndex int, vec math3d.Vector3) math3d.Vector3 {
-	hm := l.Legs[legIndex].Matrix()
-	wm := math3d.MultiplyMatrices(hm, l.hexapod.Local())
-	return vec.MultiplyByMatrix44(*wm)
-}
-
-func (l *Legs) legSet() [][]int {
-	switch legSetSize {
-	case 1:
-		return [][]int{
-			[]int{0},
-			[]int{1},
-			[]int{2},
-			[]int{3},
-			[]int{4},
-			[]int{5},
-		}
-	case 2:
-		return [][]int{
-			[]int{0, 3},
-			[]int{1, 4},
-			[]int{2, 5},
-		}
-	case 3:
-		return [][]int{
-			[]int{0, 2, 4},
-			[]int{1, 3, 5},
-		}
-	default:
-		panic("invalid legSetSize!")
-	}
-}
-
-// Returns true if any of the feet are of sufficient distance from their desired
-// positions that we need to take a step.
-func (l *Legs) needsMove(pos math3d.Vector3, rot float64) bool {
-	for i, _ := range l.Legs {
-		a := l.homeFootPosition(l.Legs[i], pos, rot)
-		a.Y = l.feet[i].Y
-		if l.feet[i].Distance(*a) > minStepDistance {
-			return true
-		}
-	}
-
-	return false
-}
-
 func (l *Legs) Tick(now time.Time, state *hexapod.State) error {
 	l.stateCounter += 1
 
 	switch l.State {
 	case sDefault:
-		l.SetState(sInit)
-
-	case sInit:
-
-		// Initialize one leg each second.
-		if int(l.StateDuration().Seconds()/initInterval) > l.initCounter {
-
-			// If we still have legs to initialize, do the next one.
-			if l.initCounter < len(l.Legs) {
-				leg := l.Legs[l.initOrder[l.initCounter]]
-
-				for _, servo := range leg.Servos() {
-					servo.SetTorqueEnable(true)
-					servo.SetMovingSpeed(1024)
-				}
-
-				leg.Initialized = true
-				l.initCounter += 1
-
-			} else {
-				// No more legs to initialize, so advance to the next state.
-				// We wait until the next initCounter before advancing, to
-				// give the last leg a second to start.
-				l.SetState(sStandUp)
-			}
-		}
+		l.SetState(sStandUp)
 
 	// TODO: Remove this state? Maybe we should add a separate interface method
 	//       which is called when the parent wants to shut everything down.
@@ -295,84 +286,101 @@ func (l *Legs) Tick(now time.Time, state *hexapod.State) error {
 	// After initialzation, raise the clearance to lift the body off the
 	// ground, into the standing position.
 	case sStandUp:
-		state.Position.Y += 2
+		state.Position.Y += 1
+		state.TargetPosition.Y += 1
 		if state.Position.Y >= standUpClearance {
-			l.SetState(sStand)
+			l.SetState(sStanding)
 		}
 
 	// Lower the clearance until the body is sitting on the ground.
 	case sSitDown:
-		state.Position.Y -= 2
+		state.Position.Y -= 1
+		state.TargetPosition.Y -= 1
 		if state.Position.Y <= sitDownClearance {
 			l.SetState(sHalt)
 		}
 
-	case sStand:
+	case sStanding:
 		if state.Shutdown {
 			l.SetState(sSitDown)
-		} else if !l.dontMove && l.needsMove(state.Position, state.Rotation) {
-			l.SetState(sStepUp)
+		} else { // if l.needsMove(state.Position, state.Rotation) {
+			l.SetState(sStepping)
 		}
 
-	case sStepUp:
-		if state.Shutdown {
-			l.SetState(sSitDown)
-		} else {
-			if l.stateCounter == 1 {
-				for _, ii := range l.legSet()[l.sLegsIndex] {
-					l.feet[ii].Y = baseFootUp
-				}
-			}
+	// TODO: This is the new needsMove()
+	//case sStepWait:
+	//	if state.TargetPosition.Subtract(state.Position).Magnitude() > 1 {
+	//		l.SetState(sStepping)
+	//	}
 
-			// TODO: Project the next step position, rather than just moving it home
-			//       every time. This will half (!!) the number of steps to move in a
-			//       constant direciton.
-			if l.stateCounter >= stepUpCount {
-				for _, ii := range l.legSet()[l.sLegsIndex] {
-					l.nextFeet[ii] = l.homeFootPosition(l.Legs[ii], state.Position, state.Rotation)
-				}
+	case sStepping:
 
-				l.SetState(sStepOver)
-			}
-		}
-
-	case sStepOver:
+		// If this is the first tick in a step cycle, calculate the next target
+		// position, which is simply the move distance in the direction of the
+		// actual target position (which may be further away).
 		if l.stateCounter == 1 {
-			for _, ii := range l.legSet()[l.sLegsIndex] {
-				l.feet[ii].X = l.nextFeet[ii].X
-				l.feet[ii].Z = l.nextFeet[ii].Z
+
+			// Record current state
+			l.lastPosition = state.Position
+			for i, _ := range l.Legs {
+				l.lastFeet[i] = *l.feet[i]
 			}
 
-		}
+			// state.TargetPosition.X = 1000
+			// state.TargetPosition.Z = 500
 
-		if l.stateCounter >= stepOverCount {
-			l.SetState(sStepDown)
-		}
+			vecToGoal := state.TargetPosition.Subtract(state.Position)
+			distToGoal := vecToGoal.Magnitude()
 
-	case sStepDown:
-		if l.stateCounter == 1 {
-			for _, ii := range l.legSet()[l.sLegsIndex] {
-				l.feet[ii].Y = baseFootDown
-			}
-		}
+			// Cap the distance we wil (attempt to) step at the max.
+			distToStep := math.Min(distToGoal, stepCycleDistance)
 
-		if l.stateCounter >= stepDownCount {
-			l.sLegsIndex += 1
+			if distToStep > 5.0 {
 
-			if l.sLegsIndex >= len(l.legSet()) {
-				l.sLegsIndex = 0
-
-				// If we still need to move, switch back to StepUp.
-				// Otherwise, stand still.
-				if l.needsMove(state.Position, state.Rotation) {
-					l.SetState(sStepUp)
-				} else {
-					l.SetState(sStand)
-				}
+				// Calculate the target position for the origin.
+				vecToStep := vecToGoal.Unit().MultiplyByScalar(distToStep)
+				l.nextTarget = *l.lastPosition.Add(vecToStep)
+				log.Infof("stepping from %v to %v", l.lastPosition, l.nextTarget)
 
 			} else {
-				l.SetState(sStepUp)
+				l.nextTarget = l.lastPosition
+				log.Infof("not stepping")
 			}
+
+			// Calculate the target position for each foot. Might be where they
+			// already are, if we're not stepping.
+			for i, leg := range l.Legs {
+				l.nextFeet[i] = l.homeFootPosition(leg, l.nextTarget, state.Rotation)
+			}
+		}
+
+		// Move continuously towards target. Note that we don't bother with the
+		// rotation (for now), so the hex will walk sideways or backwards if the
+		// target happens to be in that direction.
+		r := float64(l.stateCounter) / float64(ticksPerStepCycle)
+		v := l.nextTarget.Subtract(l.lastPosition)
+
+		state.Position = *l.lastPosition.Add(v.MultiplyByScalar(r))
+		//log.Infof("pos=%s", state.Position)
+
+		// Update the Y goal (distance from ground) of each foot according to
+		// the precomputed map.
+		for i, _ := range l.Legs {
+
+			// TODO: Move this to an attribute-- maybe we can just store the
+			//       last position and offsets? Do we even need the targets?
+			vv := l.nextFeet[i].Subtract(l.lastFeet[i])
+			vvv := vv.MultiplyByScalar(stepMoves[i][l.stateCounter-1])
+
+			l.feet[i].Y = l.lastPosition.Y + stepHeights[i][l.stateCounter-1]
+			l.feet[i].X = l.lastFeet[i].X + vvv.X
+			l.feet[i].Z = l.lastFeet[i].Z + vvv.Z
+		}
+
+		// If this is the last tick in the cycle, reset the state such that the
+		// next tick is #1.
+		if l.stateCounter >= ticksPerStepCycle {
+			l.SetState(sStepping)
 		}
 
 	default:
@@ -384,7 +392,8 @@ func (l *Legs) Tick(now time.Time, state *hexapod.State) error {
 		utils.Sync(l.Network, func() {
 			for i, leg := range l.Legs {
 				if leg.Initialized {
-					pp := l.feet[i].MultiplyByMatrix44(l.hexapod.Local())
+					pp := l.feet[i].MultiplyByMatrix44(state.Local())
+					//log.Infof("%s world=%v, local=%v, dist=%0.2f", leg.Name, l.feet[i], pp, l.feet[i].Subtract(state.Position).Magnitude())
 					leg.SetGoal(pp)
 				}
 			}

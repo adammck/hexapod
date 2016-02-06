@@ -21,7 +21,7 @@ func MakeVector3(x float64, y float64, z float64) *Vector3 {
 }
 
 func (v Vector3) String() string {
-	return fmt.Sprintf("&Vec3{x=%0.2f y=%0.2f z=%0.2f}", v.X, v.Y, v.Z)
+	return fmt.Sprintf("&Vec3{x=%+07.2f y=%+07.2f z=%+07.2f}", v.X, v.Y, v.Z)
 }
 
 // Zero returns true if the vector is at 0,0,0.
@@ -30,6 +30,8 @@ func (v Vector3) Zero() bool {
 }
 
 // Add adds two vectors, and returns a pointer to the result.
+// TODO: Return a value rather than a pointer. The caller can always create a
+//       pointer if they really want.
 func (v Vector3) Add(vv Vector3) *Vector3 {
 	return &Vector3{
 		(v.X + vv.X),
@@ -38,13 +40,38 @@ func (v Vector3) Add(vv Vector3) *Vector3 {
 	}
 }
 
-// Distance calculates and returns the distance between this vector and another,
-// as a float64.
+// Subtract one vector from another.
+func (v Vector3) Subtract(vv Vector3) Vector3 {
+	return Vector3{
+		(v.X - vv.X),
+		(v.Y - vv.Y),
+		(v.Z - vv.Z),
+	}
+}
+
+// Distance calculates and returns the distance between this vector and another.
+// TODO: Remove this; users should just Subtract and Magnitude themselves.
 func (v Vector3) Distance(vv Vector3) float64 {
-	dx := v.X - vv.X
-	dy := v.Y - vv.Y
-	dz := v.Z - vv.Z
-	return math.Sqrt((dx * dx) + (dy * dy) + (dz * dz))
+	return v.Subtract(vv).Magnitude()
+}
+
+func (v Vector3) Magnitude() float64 {
+	return math.Sqrt((v.X * v.X) + (v.Y * v.Y) + (v.Z * v.Z))
+}
+
+// Unit returns the vector scaled to a length of 1, such that it represents a
+// direction rather than a point.
+func (v Vector3) Unit() Vector3 {
+	m := v.Magnitude()
+	if m == 0 {
+		return ZeroVector3
+	}
+
+	return Vector3{
+		X: v.X / m,
+		Y: v.Y / m,
+		Z: v.Z / m,
+	}
 }
 
 // MultiplyByMatrix44 returns a new Vector3, by multiplying this vector my a 4x4
@@ -54,5 +81,15 @@ func (v Vector3) MultiplyByMatrix44(m Matrix44) Vector3 {
 		(v.X * m.m11) + (v.Y * m.m21) + (v.Z * m.m31) + m.m41,
 		(v.X * m.m12) + (v.Y * m.m22) + (v.Z * m.m32) + m.m42,
 		(v.X * m.m13) + (v.Y * m.m23) + (v.Z * m.m33) + m.m43,
+	}
+}
+
+// MultiplyByScaler returns a new vector by multiply each attribute by the given
+// scalar. This can be used to project a distance along the vector.
+func (v Vector3) MultiplyByScalar(s float64) Vector3 {
+	return Vector3{
+		(v.X * s),
+		(v.Y * s),
+		(v.Z * s),
 	}
 }
