@@ -8,6 +8,7 @@ import (
 	"github.com/Sirupsen/logrus"
 	"github.com/adammck/dynamixel/network"
 	"github.com/adammck/hexapod"
+	"github.com/adammck/hexapod/components/legs/gait"
 	"github.com/adammck/hexapod/math3d"
 	"github.com/adammck/hexapod/utils"
 )
@@ -22,15 +23,6 @@ const (
 	sSitDown  State = "sSitDown"
 	sStanding State = "sStanding"
 	sStepping State = "sStepping"
-
-	// The offset (on the Y axis) which feet should be moved to on the up step,
-	// relative to the origin.
-	baseFootUp = 40.0
-
-	// The offset (on the Y axis) which feet should be positioned at on the down
-	// step (which is the default position when standing), relative to the
-	// origin.
-	baseFootDown = 0.0
 
 	// Blah
 	sitDownClearance = 0.0
@@ -76,6 +68,8 @@ type Legs struct {
 	// ???
 	Legs [6]*Leg
 
+	Gait gait.Gait
+
 	// ???
 	baseClearance float64
 
@@ -109,60 +103,12 @@ var log = logrus.WithFields(logrus.Fields{
 	"pkg": "legs",
 })
 
-// stepHeights contains the Y position of each foot, at each tick. This is
-// computed at startup and repeated while stepping.
-var stepHeights [6][]float64
-
-// Ratios of start->end position for both X/Z.
-var stepMoves [6][]float64
-
-func init() {
-	p := ticksPerStepCycle / 4.0
-
-	// TODO: Encapsulate this, along with the other curve properties, into some
-	//       sort of Gait object, to make them pluggable.
-	stepCurveCenter := [6]float64{
-		0: p,
-		1: p * 3,
-		2: p,
-		3: p * 3,
-		4: p,
-		5: p * 3,
-	}
-
-	for i := 0; i < 6; i += 1 {
-		y := make([]float64, ticksPerStepCycle)
-		xz := make([]float64, ticksPerStepCycle)
-
-		for ii := 0; ii < ticksPerStepCycle; ii += 1 {
-			fii := float64(ii)
-
-			// Step height is a bell curve
-			y[ii] = baseFootUp * math.Pow(2, -math.Pow((fii-stepCurveCenter[i])*((math.E*2)/ticksPerStep), 2))
-
-			// Step movement ratio is a sine from 0 to 1
-			if fii < (stepCurveCenter[i] - ticksPerStep/2) {
-				xz[ii] = 0.0
-
-			} else if fii > (stepCurveCenter[i] + ticksPerStep/2) {
-				xz[ii] = 1.0
-
-			} else {
-				x := (fii - (stepCurveCenter[i] - ticksPerStep/2)) / ticksPerStep
-				xz[ii] = 0.5 - (math.Cos(x*math.Pi) / 2)
-			}
-		}
-
-		stepHeights[i] = y
-		stepMoves[i] = xz
-	}
-}
-
-func New(n *network.Network) *Legs {
+func New(n *network.Network, fps int) *Legs {
 	l := &Legs{
 		Network:       n,
 		State:         sDefault,
 		baseClearance: sitDownClearance,
+		Gait:          gait.TheGait(ticksPerStepCycle, ticksPerStep),
 		Legs: [6]*Leg{
 
 			// Leg origins are relative to the hexapod origin, which is the X/Z
@@ -286,17 +232,28 @@ func (l *Legs) Tick(now time.Time, state *hexapod.State) error {
 	// After initialzation, raise the clearance to lift the body off the
 	// ground, into the standing position.
 	case sStandUp:
+		if state.Shutdown {
+			l.SetState(sSitDown)
+			break
+		}
+
+		if l.stateCounter == 1 {
+			state.TargetPosition.Y = standUpClearance
+		}
+
 		state.Position.Y += 1
-		state.TargetPosition.Y += 1
-		if state.Position.Y >= standUpClearance {
+		if state.Position.Y >= state.TargetPosition.Y {
 			l.SetState(sStanding)
 		}
 
 	// Lower the clearance until the body is sitting on the ground.
 	case sSitDown:
+		if l.stateCounter == 1 {
+			state.TargetPosition.Y = sitDownClearance
+		}
+
 		state.Position.Y -= 1
-		state.TargetPosition.Y -= 1
-		if state.Position.Y <= sitDownClearance {
+		if state.Position.Y <= state.TargetPosition.Y {
 			l.SetState(sHalt)
 		}
 
@@ -325,9 +282,6 @@ func (l *Legs) Tick(now time.Time, state *hexapod.State) error {
 			for i, _ := range l.Legs {
 				l.lastFeet[i] = *l.feet[i]
 			}
-
-			// state.TargetPosition.X = 1000
-			// state.TargetPosition.Z = 500
 
 			vecToGoal := state.TargetPosition.Subtract(state.Position)
 			distToGoal := vecToGoal.Magnitude()
@@ -361,7 +315,6 @@ func (l *Legs) Tick(now time.Time, state *hexapod.State) error {
 		v := l.nextTarget.Subtract(l.lastPosition)
 
 		state.Position = *l.lastPosition.Add(v.MultiplyByScalar(r))
-		//log.Infof("pos=%s", state.Position)
 
 		// Update the Y goal (distance from ground) of each foot according to
 		// the precomputed map.
@@ -370,9 +323,9 @@ func (l *Legs) Tick(now time.Time, state *hexapod.State) error {
 			// TODO: Move this to an attribute-- maybe we can just store the
 			//       last position and offsets? Do we even need the targets?
 			vv := l.nextFeet[i].Subtract(l.lastFeet[i])
-			vvv := vv.MultiplyByScalar(stepMoves[i][l.stateCounter-1])
+			vvv := vv.MultiplyByScalar(l.Gait[i][l.stateCounter-1].XZ)
 
-			l.feet[i].Y = l.lastPosition.Y + stepHeights[i][l.stateCounter-1]
+			l.feet[i].Y = l.Gait[i][l.stateCounter-1].Y
 			l.feet[i].X = l.lastFeet[i].X + vvv.X
 			l.feet[i].Z = l.lastFeet[i].Z + vvv.Z
 		}
@@ -386,6 +339,8 @@ func (l *Legs) Tick(now time.Time, state *hexapod.State) error {
 	default:
 		return fmt.Errorf("unknown state: %#v", l.State)
 	}
+
+	//log.Infof("pos=%s", state.Position)
 
 	if l.State != sHalt {
 		// Update the position of each foot

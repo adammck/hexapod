@@ -59,12 +59,24 @@ type Component interface {
 
 // NewHexapod creates a new Hexapod object on the given Dynamixel network.
 func NewHexapod(network *network.Network) *Hexapod {
+
+	// hack
+	// don't commit
+	t := math3d.ZeroVector3
+	if true {
+		t = math3d.Vector3{
+			X: 1000,
+			Y: 0,
+			Z: 500,
+		}
+	}
+
 	return &Hexapod{
 		Network:    network,
 		Components: []Component{},
 		State: &State{
 			Position:       math3d.ZeroVector3,
-			TargetPosition: math3d.ZeroVector3,
+			TargetPosition: t,
 		},
 	}
 }

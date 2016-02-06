@@ -23,6 +23,7 @@ var (
 	portName = flag.String("port", "/dev/ttyACM0", "the serial port path")
 	debug    = flag.Bool("debug", false, "enable verbose logging")
 	offline  = flag.Bool("offline", false, "run in offline mode (with fake devices)")
+	fps      = flag.Int("fps", 60, "set the number of frames per second")
 )
 
 func main() {
@@ -66,8 +67,11 @@ func main() {
 	network.Timeout = 100 * time.Millisecond
 	h := hexapod.NewHexapod(network)
 
+	log.Infof("initializing loop at %dfps", *fps)
+	ticker := time.NewTicker(time.Duration(1000000000 / *fps))
+
 	log.Info("creating components")
-	l := legs.New(network)
+	l := legs.New(network, *fps)
 	h.Add(l)
 
 	var f *os.File
@@ -101,9 +105,6 @@ func main() {
 		log.Fatalf("error while booting: %s", err)
 	}
 
-	log.Info("initializing loop")
-	t := time.NewTicker(1 * time.Second / 60)
-
 	// Catch both SIGINT (ctrl+c) and SIGTERM (kill/systemd), to allow the hexapod
 	// to power down its servos before exiting.
 	c := make(chan os.Signal, 1)
@@ -125,7 +126,7 @@ func main() {
 				gracePeriod := 2000 * time.Millisecond
 				log.Warnf("shutdown requested, waiting %s...", gracePeriod)
 				time.Sleep(gracePeriod)
-				t.Stop()
+				ticker.Stop()
 
 				log.Warn("done waiting, exiting")
 				os.Exit(1)
@@ -137,9 +138,7 @@ func main() {
 
 	// Run until START (bounce service) or SELECT+START (poweroff).
 	log.Info("starting loop")
-	for now := range t.C {
-
-		//log.Info("tick")
+	for now := range ticker.C {
 		err = h.Tick(now, h.State)
 
 		if err != nil {
