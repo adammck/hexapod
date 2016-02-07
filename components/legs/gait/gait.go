@@ -1,7 +1,7 @@
 package gait
 
-import (
-	"math"
+const (
+	numLegs = 6
 )
 
 type Frame struct {
@@ -9,66 +9,23 @@ type Frame struct {
 	Y  float64
 }
 
-type FrameList []Frame
-type Gait []FrameList
+type Frames []Frame
 
-const (
-	numLegs = 6
-
-	// The offset (on the Y axis) which feet should be moved to on the up step,
-	// relative to the origin.
-	baseFootUp = 40.0
-)
-
-func TheGait(ticksPerStepCycle, ticksPerStep int) Gait {
-	gait := make(Gait, numLegs)
-	p := float64(ticksPerStepCycle) / 4.0
-
-	// TODO: Encapsulate this, along with the other curve properties, into some
-	//       sort of Gait object, to make them pluggable.
-	stepCurveCenter := [numLegs]float64{
-		0: p,
-		1: p * 3,
-		2: p,
-		3: p * 3,
-		4: p,
-		5: p * 3,
-	}
-
-	for i := 0; i < numLegs; i += 1 {
-		gait[i] = singleLegGait(ticksPerStepCycle, ticksPerStep, stepCurveCenter[i])
-	}
-
-	return gait
+type Gait struct {
+	legs   [numLegs]Frames
+	length int
 }
 
-func singleLegGait(ticksPerStepCycle, ticksPerStep int, stepCurveCenter float64) FrameList {
-	frameList := make(FrameList, ticksPerStepCycle)
-	tps := float64(ticksPerStep)
+// Length returns the number of ticks necessary to complete a full cycle of the
+// gait, such that the feet are back in their original position relative to the
+// origin.
+func (g *Gait) Length() int {
+	return g.length
+}
 
-	curveStart := stepCurveCenter - tps/2
-	curveEnd := stepCurveCenter + tps/2
-
-	for i := 0.0; i < float64(ticksPerStepCycle); i += 1.0 {
-		f := Frame{}
-
-		// Step height is a bell curve
-		f.Y = baseFootUp * math.Pow(2, -math.Pow((i-stepCurveCenter)*((math.E*2)/tps), 2))
-
-		// Step movement ratio is a sine from 0 to 1
-		if i < curveStart {
-			f.XZ = 0.0
-
-		} else if i > curveEnd {
-			f.XZ = 1.0
-
-		} else {
-			x := (i - curveStart) / tps
-			f.XZ = 0.5 - (math.Cos(x*math.Pi) / 2)
-		}
-
-		frameList[int(i)] = f
-	}
-
-	return frameList
+// Frame returns the frame (containing the XZ/Y ratios) for the given leg index
+// at the given frame number. This is just to spare the caller from checking the
+// bounds of the slices.
+func (g *Gait) Frame(leg int, n int) Frame {
+	return g.legs[leg][n]
 }

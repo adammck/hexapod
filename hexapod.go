@@ -65,9 +65,9 @@ func NewHexapod(network *network.Network) *Hexapod {
 	t := math3d.ZeroVector3
 	if true {
 		t = math3d.Vector3{
-			X: 1000,
+			X: 800,
 			Y: 0,
-			Z: 500,
+			Z: 400,
 		}
 	}
 
