@@ -68,7 +68,7 @@ func (vc *VoltageCheck) CheckVoltage() error {
 	if val < minimum {
 		logger.Warnf("low voltage: %.2fv", val)
 	} else {
-		//logger.Infof("voltage: %.2fv", val)
+		logger.Infof("voltage: %.2fv", val)
 	}
 
 	return nil

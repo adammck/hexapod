@@ -47,13 +47,16 @@ func curveCenters(groupSize int, ticksPerStepCycle int) [numLegs]float64 {
 	//     ^       ^       ^
 	//     2       6      10
 	case 2:
+		a := p * 2
+		b := p * 6
+		c := p * 10
 		return [numLegs]float64{
-			0: p * 2,
-			1: p * 6,
-			2: p * 10,
-			3: p * 2,
-			4: p * 6,
-			5: p * 10,
+			0: a, // FL
+			1: b, // FR
+			2: a, // MR
+			3: c, // BR
+			4: b, // BL
+			5: c, // ML
 		}
 
 	// Three (two groups):
@@ -63,13 +66,15 @@ func curveCenters(groupSize int, ticksPerStepCycle int) [numLegs]float64 {
 	//       ^           ^
 	//       3           9
 	case 3:
+		a := p * 3
+		b := p * 9
 		return [numLegs]float64{
-			0: p * 3,
-			1: p * 9,
-			2: p * 3,
-			3: p * 9,
-			4: p * 3,
-			5: p * 9,
+			0: a,
+			1: b,
+			2: a,
+			3: b,
+			4: a,
+			5: b,
 		}
 
 	default:

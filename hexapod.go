@@ -9,31 +9,28 @@ import (
 
 type State struct {
 
+	// The approximate number of frames per second which the main loop is
+	// currently running at. This can vary quite a bit depending on the load.
+	FPS int
+
 	// Components can set this to true to indicate that the hex should shut
 	// down. Components which need to clean up before being terminated (e.g.
 	// powering off servos) should check this value frequently.
 	Shutdown bool
 
-	// The world coordinates of the actual center of the hexapod. This should be
-	// updated as the hexapod moves around.
-	//
-	// TODO (adammck): Store the rotation as Euler angles, and modify the
-	//                 heading when rotating with L/R buttons. This is more
-	//                 self-documenting than storing the heading as a float.
-	//
-	Position math3d.Vector3
-	Rotation float64
+	// The actual pose at the origin, in the world coordinate space. This should
+	// be updated as accurately as possible as the hex walks around.
+	Pose math3d.Pose
 
-	// The world coordinates of the desired center of the hexapod. This can be
-	// set to instruct the legs to walk towards a point.
-	TargetPosition math3d.Vector3
-	TargetRotation float64
+	// The target pose of the origin, in the world space. This can be set to
+	// instruct the legs to walk towards an arbitrary point.
+	Target math3d.Pose
 }
 
 // World returns a matrix to transform a vector in the coordinate space defined
 // by the Position and Rotation attributes into the world space.
 func (s *State) World() math3d.Matrix44 {
-	return *math3d.MakeMatrix44(s.Position, *math3d.MakeSingularEulerAngle(math3d.RotationHeading, s.Rotation))
+	return *math3d.MakeMatrix44(s.Pose.Position, *math3d.MakeSingularEulerAngle(math3d.RotationHeading, s.Pose.Heading))
 }
 
 // Local returns a matrix to transform a vector in the world coordinate space
@@ -59,24 +56,19 @@ type Component interface {
 
 // NewHexapod creates a new Hexapod object on the given Dynamixel network.
 func NewHexapod(network *network.Network) *Hexapod {
-
-	// hack
-	// don't commit
-	t := math3d.ZeroVector3
-	if true {
-		t = math3d.Vector3{
-			X: 800,
-			Y: 0,
-			Z: 400,
-		}
-	}
-
 	return &Hexapod{
 		Network:    network,
 		Components: []Component{},
 		State: &State{
-			Position:       math3d.ZeroVector3,
-			TargetPosition: t,
+			FPS: 30,
+			Pose: math3d.Pose{
+				Position: math3d.ZeroVector3,
+				Heading:  0,
+			},
+			Target: math3d.Pose{
+				Position: math3d.ZeroVector3,
+				Heading:  0,
+			},
 		},
 	}
 }

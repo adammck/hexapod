@@ -15,12 +15,12 @@ PKG=$1
 shift
 
 echo
-echo "# building"
-GOARCH=arm GOOS=linux go build -v -o $TMP $PKG || exit 1
-
-echo
 echo "# waiting"
 ping -o $HOST >/dev/null
+
+echo
+echo "# building"
+GOARCH=arm GOOS=linux go build -o $TMP $PKG || exit 1
 
 echo
 echo "# deploying"

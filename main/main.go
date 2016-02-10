@@ -23,7 +23,7 @@ var (
 	portName = flag.String("port", "/dev/ttyACM0", "the serial port path")
 	debug    = flag.Bool("debug", false, "enable verbose logging")
 	offline  = flag.Bool("offline", false, "run in offline mode (with fake devices)")
-	fps      = flag.Int("fps", 60, "set the number of frames per second")
+	fps      = flag.Int("fps", 30, "set the number of frames per second")
 )
 
 func main() {
@@ -50,28 +50,38 @@ func main() {
 
 	} else {
 		log.Info("opening serial port")
-		srl, err := serial.Open(sOpts)
+		srl, err = serial.Open(sOpts)
 		if err != nil {
 			log.Fatalf("error opening serial port: %s\n", err)
 		}
 		defer srl.Close()
 
+		var b []byte
 		log.Info("purging serial buffer")
-		_, err = ioutil.ReadAll(srl)
+		b, err = ioutil.ReadAll(srl)
 		if err != nil {
 			log.Fatalf("error purging serial buffer: %s\n", err)
 		}
+		log.Infof("purged %d bytes", len(b))
 	}
 
 	network := network.New(srl)
-	network.Timeout = 100 * time.Millisecond
+	network.Timeout = 1 * time.Second
+
+	// Optionally log network traffic. This is VERY verbose!
+	if *debug {
+		network.Logger = log.WithFields(log.Fields{
+			"pkg": "dxl",
+		})
+	}
+
 	h := hexapod.NewHexapod(network)
 
 	log.Infof("initializing loop at %dfps", *fps)
 	ticker := time.NewTicker(time.Duration(1000000000 / *fps))
 
 	log.Info("creating components")
-	l := legs.New(network, *fps)
+	l := legs.New(network)
 	h.Add(l)
 
 	var f *os.File
@@ -129,7 +139,7 @@ func main() {
 				ticker.Stop()
 
 				log.Warn("done waiting, exiting")
-				os.Exit(1)
+				os.Exit(0)
 			}
 
 			time.Sleep(500 * time.Millisecond)

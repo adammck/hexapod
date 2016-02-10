@@ -17,7 +17,7 @@ func Rad(degrees float64) float64 {
 // initiates any movements at once by sending ACTION.
 func Sync(n *network.Network, f func()) {
 	n.SetBuffered(true)
+	defer n.SetBuffered(false)
+	defer n.Action()
 	f()
-	n.SetBuffered(false)
-	n.Action()
 }
