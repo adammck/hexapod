@@ -6,10 +6,13 @@ import (
 	"github.com/adammck/dynamixel/network"
 	"github.com/adammck/hexapod"
 	"github.com/adammck/hexapod/components/controller"
+	"github.com/adammck/hexapod/components/head"
 	"github.com/adammck/hexapod/components/legs"
 	"github.com/adammck/hexapod/components/voltage"
 	fake_serial "github.com/adammck/hexapod/fake/serial"
 	fake_voltage "github.com/adammck/hexapod/fake/voltage"
+	"github.com/adammck/hexapod/math3d"
+	"github.com/adammck/hexapod/utils"
 	"github.com/jacobsa/go-serial/serial"
 	"io"
 	"io/ioutil"
@@ -108,6 +111,19 @@ func main() {
 		v = l.Legs[0].Coxa
 	}
 	h.Add(voltage.New(v))
+
+	headH, err := utils.Servo(network, 71)
+	if err != nil {
+		log.Fatalf("error while initializing servo #71: %s", err)
+	}
+	headV, err := utils.Servo(network, 72)
+	if err != nil {
+		log.Fatalf("error while initializing servo #72: %s", err)
+	}
+	h.Add(head.New(
+		math3d.Pose{math3d.Vector3{X: 0, Y: 43.0, Z: 70}, 0},
+		headH,
+		headV))
 
 	log.Info("booting components")
 	err = h.Boot()

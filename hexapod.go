@@ -25,6 +25,10 @@ type State struct {
 	// The target pose of the origin, in the world space. This can be set to
 	// instruct the legs to walk towards an arbitrary point.
 	Target math3d.Pose
+
+	// The point to aim the head (camera) at, in the world space. This is a
+	// pointer so it can be set to nil if there is no target.
+	LookAt *math3d.Vector3
 }
 
 // World returns a matrix to transform a vector in the coordinate space defined
@@ -69,6 +73,7 @@ func NewHexapod(network *network.Network) *Hexapod {
 				Position: math3d.ZeroVector3,
 				Heading:  0,
 			},
+			LookAt: nil,
 		},
 	}
 }
