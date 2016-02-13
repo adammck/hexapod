@@ -35,7 +35,7 @@ const (
 
 	// The number of ticks per step, i.e. a single foot is lifted, moved to its
 	// new position, and put down.
-	ticksPerStep = 48
+	ticksPerStep = 24
 
 	// The offset (on the Y axis) which feet should be moved to on the up step,
 	// relative to the origin.
@@ -206,21 +206,11 @@ func (l *Legs) Tick(now time.Time, state *hexapod.State) error {
 	l.stateCounter += 1
 
 	switch l.State {
+	case sHalt:
+		return nil
+
 	case sDefault:
 		l.SetState(sStandUp)
-
-	// TODO: Remove this state? Maybe we should add a separate interface method
-	//       which is called when the parent wants to shut everything down.
-	case sHalt:
-		if l.stateCounter == 1 {
-			for _, leg := range l.Legs {
-				for _, servo := range leg.Servos() {
-					servo.SetStatusReturnLevel(2)
-					servo.SetTorqueEnable(false)
-					servo.SetLED(false)
-				}
-			}
-		}
 
 	// After initialzation, raise the clearance to lift the body off the
 	// ground, into the standing position.
@@ -358,18 +348,16 @@ func (l *Legs) Tick(now time.Time, state *hexapod.State) error {
 
 	//log.Infof("pos=%s", state.Position)
 
-	if l.State != sHalt {
-		// Update the position of each foot
-		utils.Sync(l.Network, func() {
-			for i, leg := range l.Legs {
-				if leg.Initialized {
-					pp := l.feet[i].MultiplyByMatrix44(state.Local())
-					//log.Infof("%s world=%v, local=%v, dist=%0.2f", leg.Name, l.feet[i], pp, l.feet[i].Subtract(state.Position).Magnitude())
-					leg.SetGoal(pp)
-				}
+	// Update the position of each foot
+	utils.Sync(l.Network, func() {
+		for i, leg := range l.Legs {
+			if leg.Initialized {
+				pp := l.feet[i].MultiplyByMatrix44(state.Local())
+				//log.Infof("%s world=%v, local=%v, dist=%0.2f", leg.Name, l.feet[i], pp, l.feet[i].Subtract(state.Position).Magnitude())
+				leg.SetGoal(pp)
 			}
-		})
-	}
+		}
+	})
 
 	return nil
 }

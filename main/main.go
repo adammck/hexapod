@@ -12,7 +12,7 @@ import (
 	fake_serial "github.com/adammck/hexapod/fake/serial"
 	fake_voltage "github.com/adammck/hexapod/fake/voltage"
 	"github.com/adammck/hexapod/math3d"
-	"github.com/adammck/hexapod/utils"
+	"github.com/adammck/hexapod/servos"
 	"github.com/jacobsa/go-serial/serial"
 	"io"
 	"io/ioutil"
@@ -95,7 +95,7 @@ func main() {
 
 	} else {
 		log.Info("opening controller")
-		f, err = os.Open("/dev/input/event0")
+		f, err = os.Open("/dev/input/event1")
 		if err != nil {
 			log.Fatalf("error opening controller: %s", err)
 		}
@@ -112,11 +112,11 @@ func main() {
 	}
 	h.Add(voltage.New(v))
 
-	headH, err := utils.Servo(network, 71)
+	headH, err := servos.New(network, 71)
 	if err != nil {
 		log.Fatalf("error while initializing servo #71: %s", err)
 	}
-	headV, err := utils.Servo(network, 72)
+	headV, err := servos.New(network, 72)
 	if err != nil {
 		log.Fatalf("error while initializing servo #72: %s", err)
 	}
@@ -144,32 +144,50 @@ func main() {
 		}
 	}()
 
-	// Wait until h.Shutdown is true, then keep looping for three seconds, to give
-	// everything time to shut down gracefully. Then quit.
-	go func() {
-		for {
-			if h.State.Shutdown {
-				gracePeriod := 2000 * time.Millisecond
-				log.Warnf("shutdown requested, waiting %s...", gracePeriod)
-				time.Sleep(gracePeriod)
-				ticker.Stop()
-
-				log.Warn("done waiting, exiting")
-				os.Exit(0)
-			}
-
-			time.Sleep(500 * time.Millisecond)
+	// Recover from any panics which occurred in the main loop, and shut down
+	// the servos before exiting.
+	defer func() {
+		if r := recover(); r != nil {
+			log.Warnf("recovered from panic: %s", r)
+			servos.Shutdown()
+			os.Exit(1)
 		}
 	}()
 
-	// Run until START (bounce service) or SELECT+START (poweroff).
+	// This is set as soon as h.State.Shutdown becomes true.
+	var shutdownPending time.Time
+
+	// How long to wait for components to stop after requesting shutdown.
+	gracePeriod := 2000 * time.Millisecond
+
+	// Run forever
 	log.Info("starting loop")
 	for now := range ticker.C {
 		err = h.Tick(now, h.State)
 
 		if err != nil {
-			log.Error(err)
-			os.Exit(1)
+			panic(err)
+		}
+
+		// Continue looping if shutdown wasn't requested
+		if !h.State.Shutdown {
+			continue
+		}
+
+		// On the first loop after shutdown being set, note the time, so we can
+		// continue looping for the grace period without sleeping.
+		if shutdownPending.IsZero() {
+			log.Warnf("shutdown requested, waiting %s...", gracePeriod)
+			shutdownPending = time.Now()
+			continue
+		}
+
+		// Once the grace period is up, power off the servos and exit.
+		if time.Since(shutdownPending) > gracePeriod {
+			log.Warn("done waiting, shutting down")
+			ticker.Stop()
+			servos.Shutdown()
+			break
 		}
 	}
 }

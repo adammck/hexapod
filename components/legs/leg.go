@@ -4,8 +4,8 @@ import (
 	"github.com/Sirupsen/logrus"
 	"github.com/adammck/dynamixel/network"
 	"github.com/adammck/dynamixel/servo"
-	"github.com/adammck/dynamixel/servo/ax"
 	"github.com/adammck/hexapod/math3d"
+	"github.com/adammck/hexapod/servos"
 	"github.com/adammck/hexapod/utils"
 	"math"
 )
@@ -26,22 +26,22 @@ type Leg struct {
 }
 
 func NewLeg(network *network.Network, baseId int, name string, origin *math3d.Vector3, angle float64) *Leg {
-	coxa, err := ax.New(network, baseId+1)
+	coxa, err := servos.New(network, baseId+1)
 	if err != nil {
 		panic(err)
 	}
 
-	femur, err := ax.New(network, baseId+2)
+	femur, err := servos.New(network, baseId+2)
 	if err != nil {
 		panic(err)
 	}
 
-	tibia, err := ax.New(network, baseId+3)
+	tibia, err := servos.New(network, baseId+3)
 	if err != nil {
 		panic(err)
 	}
 
-	tarsus, err := ax.New(network, baseId+4)
+	tarsus, err := servos.New(network, baseId+4)
 	if err != nil {
 		panic(err)
 	}
