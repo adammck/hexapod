@@ -12,9 +12,9 @@ import (
 
 const (
 	upLimit    = 10
-	downLimit  = -10
-	leftLimit  = -20
-	rightLimit = 20
+	downLimit  = -20
+	leftLimit  = -45
+	rightLimit = 45
 )
 
 var logger = log.WithFields(log.Fields{
@@ -48,7 +48,7 @@ func (h *Head) Tick(now time.Time, state *hexapod.State) error {
 
 	// Transform the vector (from the origin to the dest) into horizontal (X)
 	// and vertical (Y) angles. There is no Z between two vectors.
-	x := utils.Deg(math.Atan(v.X / v.Z))
+	x := 0 - utils.Deg(math.Atan(v.X/v.Z))
 	y := utils.Deg(math.Atan(v.Y / v.Z))
 
 	// Constrain angles to avoid mechanical damage.
@@ -56,10 +56,9 @@ func (h *Head) Tick(now time.Time, state *hexapod.State) error {
 	x = math.Max(math.Min(x, rightLimit), leftLimit)
 	y = math.Max(math.Min(y, upLimit), downLimit)
 
-	//
+	// Update servos every tick.
+	// TODO: Maybe only update if the x/y has changed.
 	h.h.MoveTo(x)
 	h.v.MoveTo(y)
-
-	log.Infof("head=%v, h=%v, v=%v", v, x, y)
 	return nil
 }

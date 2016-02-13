@@ -11,9 +11,9 @@ import (
 
 const (
 	moveSpeed           = 100.0
-	rotSpeed            = 20.0
-	horizontalLookScale = 10.0
-	verticalLookScale   = 10.0
+	rotSpeed            = 15.0
+	horizontalLookScale = 250.0
+	verticalLookScale   = 250.0
 )
 
 type Controller struct {
@@ -48,9 +48,9 @@ func (c *Controller) Tick(now time.Time, state *hexapod.State) error {
 	// Lock focal point (for head) to 100mm directly in front of the origin.
 	fp := state.Pose.Add(math3d.Pose{
 		Position: math3d.Vector3{
-			X: (float64(c.sa.RightStick.X/127.0) * horizontalLookScale),
-			Y: 43 + (float64(c.sa.RightStick.Y/127.0) * verticalLookScale),
-			Z: 100,
+			X: float64(c.sa.RightStick.X) / 127.0 * horizontalLookScale,
+			Y: 43 + float64(c.sa.RightStick.Y)/127.0*verticalLookScale,
+			Z: 500,
 		},
 		Heading: 0,
 	}).Position
