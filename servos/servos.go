@@ -19,7 +19,9 @@ func New(n *network.Network, ID int) (*servo.Servo, error) {
 		return nil, err
 	}
 
-	err = s.SetStatusReturnLevel(1)
+	// Don't bother sending ACKs for writes. We must do this first, to ensure that
+	// the servos are in the expected state before sending other commands.
+	err = s.SetReturnLevel(1)
 	if err != nil {
 		return nil, fmt.Errorf("%s (while setting return level)", err)
 	}

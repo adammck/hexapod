@@ -1,13 +1,15 @@
 package legs
 
 import (
+	"fmt"
+	"math"
+
 	"github.com/Sirupsen/logrus"
 	"github.com/adammck/dynamixel/network"
 	"github.com/adammck/dynamixel/servo"
 	"github.com/adammck/hexapod/math3d"
 	"github.com/adammck/hexapod/servos"
 	"github.com/adammck/hexapod/utils"
-	"math"
 )
 
 type Leg struct {
@@ -18,33 +20,15 @@ type Leg struct {
 	Tibia  *servo.Servo
 	Tarsus *servo.Servo
 
-	// Has the leg been initialized yet? It can't be moved until it has.
-	Initialized bool
-
 	// TODO: Rename this to 'Heading', since that's what it is.
 	Angle float64
 }
 
 func NewLeg(network *network.Network, baseId int, name string, origin *math3d.Vector3, angle float64) *Leg {
-	coxa, err := servos.New(network, baseId+1)
-	if err != nil {
-		panic(err)
-	}
-
-	femur, err := servos.New(network, baseId+2)
-	if err != nil {
-		panic(err)
-	}
-
-	tibia, err := servos.New(network, baseId+3)
-	if err != nil {
-		panic(err)
-	}
-
-	tarsus, err := servos.New(network, baseId+4)
-	if err != nil {
-		panic(err)
-	}
+	coxa := mustGetServo(network, baseId+1)
+	femur := mustGetServo(network, baseId+2)
+	tibia := mustGetServo(network, baseId+3)
+	tarsus := mustGetServo(network, baseId+4)
 
 	return &Leg{
 		Origin: origin,
@@ -55,6 +39,15 @@ func NewLeg(network *network.Network, baseId int, name string, origin *math3d.Ve
 		Tibia:  tibia,
 		Tarsus: tarsus,
 	}
+}
+
+func mustGetServo(network *network.Network, ID int) *servo.Servo {
+	s, err := servos.New(network, ID)
+	if err != nil {
+		panic(err)
+	}
+
+	return s
 }
 
 // Matrix returns a pointer to a 4x4 matrix, to transform a vector in the leg's
@@ -106,11 +99,6 @@ func (leg *Leg) segments() (*Segment, *Segment, *Segment, *Segment) {
 // to the center of the hexapod.
 func (leg *Leg) SetGoal(p math3d.Vector3) {
 	_, femur, _, _ := leg.segments()
-
-	// TODO (adammck): Return an error instead!
-	if !leg.Initialized {
-		panic("leg not initialized")
-	}
 
 	v := &math3d.Vector3{X: p.X, Y: p.Y, Z: p.Z}
 	vv := v.Add(math3d.Vector3{X: 0, Y: 64, Z: 0})

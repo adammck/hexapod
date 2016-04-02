@@ -17,7 +17,6 @@ type State string
 
 const (
 	sDefault  State = ""
-	sInit     State = "sInit"
 	sHalt     State = "sHalt"
 	sStandUp  State = "sStandUp"
 	sSitDown  State = "sSitDown"
@@ -141,42 +140,8 @@ func New(n *network.Network) *Legs {
 	return l
 }
 
-// Boot pings all servos, and returns an error if any of them fail to respond.
+// Boot does nothing. Legs (and hence servos) are booted by the initializer now.
 func (l *Legs) Boot() error {
-
-	// Don't bother sending ACKs for writes. We must do this first, to ensure that
-	// the servos are in the expected state before sending other commands.
-	for _, leg := range l.Legs {
-		for _, servo := range leg.Servos() {
-			setStatusErr := servo.SetStatusReturnLevel(1)
-			if setStatusErr != nil {
-				return fmt.Errorf("error while setting status return level of servo #%d: %s", servo.ID, setStatusErr)
-			}
-		}
-	}
-
-	// Ping all servos to ensure they're all alive.
-	for _, leg := range l.Legs {
-		for _, servo := range leg.Servos() {
-			log.Infof("pinging servo #%d", servo.ID)
-			pingErr := servo.Ping()
-			if pingErr != nil {
-				return fmt.Errorf("error while pinging servo #%d: %s", servo.ID, pingErr)
-			}
-		}
-	}
-
-	// Initialize each servo.
-	for _, leg := range l.Legs {
-		for _, servo := range leg.Servos() {
-			servo.SetTorqueEnable(true)
-			servo.SetMovingSpeed(1024)
-		}
-
-		leg.Initialized = true
-	}
-
-	return nil
 }
 
 func (l *Legs) SetState(s State) {
@@ -345,8 +310,6 @@ func (l *Legs) Tick(now time.Time, state *hexapod.State) error {
 	default:
 		return fmt.Errorf("unknown state: %#v", l.State)
 	}
-
-	//log.Infof("pos=%s", state.Position)
 
 	// Update the position of each foot
 	utils.Sync(l.Network, func() {
