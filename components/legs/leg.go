@@ -1,7 +1,6 @@
 package legs
 
 import (
-	"fmt"
 	"math"
 
 	"github.com/Sirupsen/logrus"
