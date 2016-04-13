@@ -33,6 +33,12 @@ func (c *Controller) Boot() error {
 
 func (c *Controller) Tick(now time.Time, state *hexapod.State) error {
 
+	// Do nothing if we're shutting down.
+	if state.Shutdown {
+		return nil
+	}
+
+	// Calculate a new pose (relative to zero) based on the controller state.
 	p := math3d.Pose{
 		Position: math3d.Vector3{
 			X: (float64(c.sa.LeftStick.X) / 127.0) * moveSpeed,
