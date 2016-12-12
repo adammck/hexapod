@@ -23,10 +23,11 @@ import (
 )
 
 var (
-	portName = flag.String("port", "/dev/ttyACM0", "the serial port path")
-	debug    = flag.Bool("debug", false, "enable verbose logging")
-	offline  = flag.Bool("offline", false, "run in offline mode (with fake devices)")
-	fps      = flag.Int("fps", 30, "set the number of frames per second")
+	serialPort     = flag.String("port", "/dev/ttyACM0", "path to the serial port")
+	controllerPort = flag.String("port", "/dev/input/event0", "path to the sixaxis controller")
+	debug          = flag.Bool("debug", false, "enable verbose logging")
+	offline        = flag.Bool("offline", false, "run in offline mode (with fake devices)")
+	fps            = flag.Int("fps", 60, "set the number of frames per second")
 )
 
 func main() {
@@ -38,7 +39,7 @@ func main() {
 	}
 
 	sOpts := serial.OpenOptions{
-		PortName:              *portName,
+		PortName:              *serialPort,
 		BaudRate:              1000000,
 		DataBits:              8,
 		StopBits:              1,
@@ -95,7 +96,7 @@ func main() {
 
 	} else {
 		log.Info("opening controller")
-		f, err = os.Open("/dev/input/event1")
+		f, err = os.Open(*controllerPort)
 		if err != nil {
 			log.Fatalf("error opening controller: %s", err)
 		}
