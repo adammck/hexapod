@@ -19,8 +19,8 @@ func New(n *network.Network, ID int) (*servo.Servo, error) {
 		return nil, err
 	}
 
-	// Don't bother sending ACKs for writes. We must do this first, to ensure that
-	// the servos are in the expected state before sending other commands.
+	// Don't bother sending ACKs for writes. We must do this first, to ensure
+	// that the servos are in the expected state before sending other commands.
 	err = s.SetReturnLevel(1)
 	if err != nil {
 		return nil, fmt.Errorf("%s (while setting return level)", err)
@@ -34,6 +34,11 @@ func New(n *network.Network, ID int) (*servo.Servo, error) {
 	// Add to the pool as soon as we know the servo is available, to ensure that
 	// we power it down at shutdown even if the next lines fail.
 	servos = append(servos, s)
+
+	err = s.SetReturnDelayTime(0)
+	if err != nil {
+		return nil, fmt.Errorf("%s (while setting return delay)", err)
+	}
 
 	err = s.SetTorqueEnable(true)
 	if err != nil {
