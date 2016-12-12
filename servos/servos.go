@@ -45,6 +45,11 @@ func New(n *network.Network, ID int) (*servo.Servo, error) {
 		return nil, fmt.Errorf("%s (while setting move speed)", err)
 	}
 
+	// Buffer all subsequent instructions. The ACTION command is issued at the
+	// end of each tick. Note that this is just an attribute of the servo; it
+	// doesn't affect the actual control table, so doesn't need un-setting.
+	s.SetBuffered(true)
+
 	return s, nil
 }
 

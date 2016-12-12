@@ -2,7 +2,9 @@ package hexapod
 
 import (
 	"fmt"
+	"github.com/adammck/dynamixel/iface"
 	"github.com/adammck/dynamixel/network"
+	proto1 "github.com/adammck/dynamixel/protocol/v1"
 	"github.com/adammck/hexapod/math3d"
 	"time"
 )
@@ -44,8 +46,13 @@ func (s *State) Local() math3d.Matrix44 {
 }
 
 type Hexapod struct {
-	Network    *network.Network
+	Network    *network.Network // TODO: Make this a io.ReadWriter
 	Components []Component
+
+	// Keep an unbound (i.e. having no particular servo ID) protocol for each
+	// version present on the Dynamixel network. This is just v1, so long as
+	// we're only using AX-12s.
+	Protocols []iface.Protocol
 
 	// Most components receive (and update) the state every tick, to instruct or
 	// react to instructions. This is more easily testable than passing around
@@ -63,6 +70,9 @@ func NewHexapod(network *network.Network) *Hexapod {
 	return &Hexapod{
 		Network:    network,
 		Components: []Component{},
+		Protocols: []iface.Protocol{
+			proto1.New(network),
+		},
 		State: &State{
 			FPS: 30,
 			Pose: math3d.Pose{
@@ -95,13 +105,18 @@ func (h *Hexapod) Boot() error {
 	return nil
 }
 
-// Tick calls Tick on each component.
+// Tick calls Tick on each component, then sends the ACTION instruction to
+// trigger any buffered instructions.
 func (h *Hexapod) Tick(now time.Time, state *State) error {
 	for _, c := range h.Components {
 		err := c.Tick(now, state)
 		if err != nil {
 			return fmt.Errorf("%T.Tick returned error: %v", c, err)
 		}
+	}
+
+	for i := range h.Protocols {
+		h.Protocols[i].Action()
 	}
 
 	return nil

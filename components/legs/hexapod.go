@@ -313,13 +313,11 @@ func (l *Legs) Tick(now time.Time, state *hexapod.State) error {
 	}
 
 	// Update the position of each foot
-	utils.Sync(l.Network, func() {
-		for i, leg := range l.Legs {
-			pp := l.feet[i].MultiplyByMatrix44(state.Local())
-			//log.Infof("%s world=%v, local=%v, dist=%0.2f", leg.Name, l.feet[i], pp, l.feet[i].Subtract(state.Position).Magnitude())
-			leg.SetGoal(pp)
-		}
-	})
+	for i, leg := range l.Legs {
+		pp := l.feet[i].MultiplyByMatrix44(state.Local())
+		//log.Infof("%s world=%v, local=%v, dist=%0.2f", leg.Name, l.feet[i], pp, l.feet[i].Subtract(state.Position).Magnitude())
+		leg.SetGoal(pp)
+	}
 
 	return nil
 }
