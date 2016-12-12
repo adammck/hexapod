@@ -11,6 +11,12 @@ import (
 	"github.com/adammck/hexapod/utils"
 )
 
+const (
+	femurLength  = 100
+	tibiaLength  = 85
+	tarsusLength = 80.5
+)
+
 type Leg struct {
 	Name   string
 	Origin *math3d.Vector3
@@ -86,9 +92,9 @@ func (leg *Leg) segments() (*Segment, *Segment, *Segment, *Segment) {
 
 	// Movable segments (angles in deg, vectors in mm)
 	coxa := MakeSegment("coxa", r2, *math3d.MakeSingularEulerAngle(math3d.RotationHeading, 40), *math3d.MakeVector3(39, -12, 0))
-	femur := MakeSegment("femur", coxa, *math3d.MakeSingularEulerAngle(math3d.RotationBank, 90), *math3d.MakeVector3(100, 0, 0))
-	tibia := MakeSegment("tibia", femur, *math3d.MakeSingularEulerAngle(math3d.RotationBank, 0), *math3d.MakeVector3(85, 0, 0))
-	tarsus := MakeSegment("tarsus", tibia, *math3d.MakeSingularEulerAngle(math3d.RotationBank, 90), *math3d.MakeVector3(76.5, 0, 0))
+	femur := MakeSegment("femur", coxa, *math3d.MakeSingularEulerAngle(math3d.RotationBank, 90), *math3d.MakeVector3(femurLength, 0, 0))
+	tibia := MakeSegment("tibia", femur, *math3d.MakeSingularEulerAngle(math3d.RotationBank, 0), *math3d.MakeVector3(tibiaLength, 0, 0))
+	tarsus := MakeSegment("tarsus", tibia, *math3d.MakeSingularEulerAngle(math3d.RotationBank, 90), *math3d.MakeVector3(tarsusLength, 0, 0))
 
 	// Return just the useful segments
 	return coxa, femur, tibia, tarsus
