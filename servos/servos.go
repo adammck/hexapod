@@ -3,6 +3,7 @@ package servos
 import (
 	"fmt"
 
+	log "github.com/Sirupsen/logrus"
 	"github.com/adammck/dynamixel/network"
 	"github.com/adammck/dynamixel/servo"
 	"github.com/adammck/dynamixel/servo/ax"
@@ -40,11 +41,7 @@ func New(n *network.Network, ID int) (*servo.Servo, error) {
 		return nil, fmt.Errorf("%s (while setting return delay)", err)
 	}
 
-	err = s.SetTorqueEnable(true)
-	if err != nil {
-		return nil, fmt.Errorf("%s (while enabling torque)", err)
-	}
-
+	// Note: This enables torque, so we don't need to do that separately.
 	err = s.SetMovingSpeed(1023)
 	if err != nil {
 		return nil, fmt.Errorf("%s (while setting move speed)", err)
@@ -63,7 +60,16 @@ func New(n *network.Network, ID int) (*servo.Servo, error) {
 // indefinitely.
 func Shutdown() {
 	for _, s := range servos {
-		s.SetTorqueEnable(false)
-		s.SetLED(false)
+		s.SetBuffered(false)
+
+		err := s.SetTorqueEnable(false)
+		if err != nil {
+			log.Warnf("%s (while disabling torque)", err)
+		}
+
+		err = s.SetLED(false)
+		if err != nil {
+			log.Warnf("%s (while disabling LED)", err)
+		}
 	}
 }
