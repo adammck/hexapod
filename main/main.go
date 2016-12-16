@@ -23,8 +23,8 @@ import (
 )
 
 var (
-	serialPort     = flag.String("port", "/dev/ttyACM0", "path to the serial port")
-	controllerPort = flag.String("port", "/dev/input/event0", "path to the sixaxis controller")
+	serialPort     = flag.String("serial-port", "/dev/ttyACM0", "path to the serial port")
+	controllerPort = flag.String("controller-port", "/dev/input/event0", "path to the sixaxis controller")
 	debug          = flag.Bool("debug", false, "enable verbose logging")
 	offline        = flag.Bool("offline", false, "run in offline mode (with fake devices)")
 	fps            = flag.Int("fps", 60, "set the number of frames per second")
