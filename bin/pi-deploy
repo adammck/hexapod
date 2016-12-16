@@ -15,10 +15,6 @@ PKG=$1
 shift
 
 echo
-echo "# waiting"
-ping -o $HOST >/dev/null
-
-echo
 echo "# building"
 GOARCH=arm GOOS=linux go build -o $TMP $PKG || exit 1
 
