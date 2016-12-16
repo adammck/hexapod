@@ -1,6 +1,7 @@
 package legs
 
 import (
+	"fmt"
 	"math"
 
 	"github.com/Sirupsen/logrus"
@@ -12,9 +13,15 @@ import (
 )
 
 const (
-	femurLength  = 100
-	tibiaLength  = 85
+	coxaOffsetX  = 39.0
+	coxaOffsetY  = -12.0
+	femurLength  = 100.0
+	tibiaLength  = 85.0
 	tarsusLength = 80.5
+
+	// How much extra angle (in degrees) to position the tarsus. This is a hack
+	// to compensate for the amount of mechanical slack in the leg.
+	tarsusExtraAngle = 5
 )
 
 type Leg struct {
@@ -82,16 +89,21 @@ func _sss(a float64, b float64, c float64) float64 {
 	return utils.Deg(math.Acos(((b * b) + (c * c) - (a * a)) / (2 * b * c)))
 }
 
-func (leg *Leg) segments() (*Segment, *Segment, *Segment, *Segment) {
+// rootSegment returns the segment at the origin of this leg.
+func (leg *Leg) rootSegment() *Segment {
 
-	// The position of the object in space must be specified by two segments. The
-	// first positions it, then the second (which is always zero-length) rotates
-	// it into the home orientation.
-	r1 := MakeRootSegment(*math3d.MakeVector3(leg.Origin.X, leg.Origin.Y, leg.Origin.Z))
-	r2 := MakeSegment("r2", r1, *math3d.MakeSingularEulerAngle(math3d.RotationHeading, leg.Angle), *math3d.MakeVector3(0, 0, 0))
+	// The position of the leg in world space must be specified by two segments.
+	// The first positions it, then the second (which is always zero-length)
+	// rotates it into the home orientation.
+	s1 := MakeRootSegment(*math3d.MakeVector3(leg.Origin.X, leg.Origin.Y, leg.Origin.Z))
+	return MakeSegment("s2", s1, *math3d.MakeSingularEulerAngle(math3d.RotationHeading, leg.Angle), *math3d.MakeVector3(0, 0, 0))
+}
+
+func (leg *Leg) segments() (*Segment, *Segment, *Segment, *Segment) {
+	r2 := leg.rootSegment()
 
 	// Movable segments (angles in deg, vectors in mm)
-	coxa := MakeSegment("coxa", r2, *math3d.MakeSingularEulerAngle(math3d.RotationHeading, 40), *math3d.MakeVector3(39, -12, 0))
+	coxa := MakeSegment("coxa", r2, *math3d.MakeSingularEulerAngle(math3d.RotationHeading, 40), *math3d.MakeVector3(coxaOffsetX, coxaOffsetY, 0))
 	femur := MakeSegment("femur", coxa, *math3d.MakeSingularEulerAngle(math3d.RotationBank, 90), *math3d.MakeVector3(femurLength, 0, 0))
 	tibia := MakeSegment("tibia", femur, *math3d.MakeSingularEulerAngle(math3d.RotationBank, 0), *math3d.MakeVector3(tibiaLength, 0, 0))
 	tarsus := MakeSegment("tarsus", tibia, *math3d.MakeSingularEulerAngle(math3d.RotationBank, 90), *math3d.MakeVector3(tarsusLength, 0, 0))
@@ -100,13 +112,52 @@ func (leg *Leg) segments() (*Segment, *Segment, *Segment, *Segment) {
 	return coxa, femur, tibia, tarsus
 }
 
+// PresentPosition returns the actual present posion (relative to the center of
+// the hexapod) of the end of this leg. This involves reading the position of
+// each servo, so don't call it in the main loop.
+func (leg *Leg) PresentPosition() (math3d.Vector3, error) {
+	v := math3d.ZeroVector3
+
+	coxaPos, err := leg.Coxa.Angle()
+	if err != nil {
+		return v, fmt.Errorf("%s (while getting %s coxa (#%d) position)", err, leg.Name, leg.Coxa.ID)
+	}
+
+	femurPos, err := leg.Femur.Angle()
+	if err != nil {
+		return v, fmt.Errorf("%s (while getting %s femur (#%d) position)", err, leg.Name, leg.Femur.ID)
+	}
+
+	tibiaPos, err := leg.Tibia.Angle()
+	if err != nil {
+		return v, fmt.Errorf("%s (while getting %s tibia (#%d) position)", err, leg.Name, leg.Tibia.ID)
+	}
+
+	tarsusPos, err := leg.Tarsus.Angle()
+	if err != nil {
+		return v, fmt.Errorf("%s (while getting %s tarsus (#%d) position)", err, leg.Name, leg.Tarsus.ID)
+	}
+
+	// TODO: Why the hell do we have to invert these three angles? We're (kind
+	//       of) doing this in SetGoal, too. Should we set zero angles for each
+	//       servo? I seriously have no idea why this works.
+
+	root := leg.rootSegment()
+	coxa := MakeSegment("coxa", root, *math3d.MakeSingularEulerAngle(math3d.RotationHeading, coxaPos), *math3d.MakeVector3(coxaOffsetX, coxaOffsetY, 0))
+	femur := MakeSegment("femur", coxa, *math3d.MakeSingularEulerAngle(math3d.RotationBank, femurPos*-1), *math3d.MakeVector3(femurLength, 0, 0))
+	tibia := MakeSegment("tibia", femur, *math3d.MakeSingularEulerAngle(math3d.RotationBank, tibiaPos*-1), *math3d.MakeVector3(tibiaLength, 0, 0))
+	tarsus := MakeSegment("tarsus", tibia, *math3d.MakeSingularEulerAngle(math3d.RotationBank, (tarsusPos*-1)-tarsusExtraAngle), *math3d.MakeVector3(tarsusLength, 0, 0))
+
+	return tarsus.End(), nil
+}
+
 // Sets the goal position of this leg to the given x/y/z coordinates, relative
 // to the center of the hexapod.
 func (leg *Leg) SetGoal(p math3d.Vector3) {
 	_, femur, _, _ := leg.segments()
 
 	v := &math3d.Vector3{X: p.X, Y: p.Y, Z: p.Z}
-	vv := v.Add(math3d.Vector3{X: 0, Y: 64, Z: 0})
+	vv := v.Add(math3d.Vector3{X: 0, Y: tarsusLength, Z: 0})
 
 	// Solve the angle of the coxa by looking at the position of the target from
 	// above (x,z). It's the only joint which rotates around the Y axis, so we can
@@ -123,11 +174,11 @@ func (leg *Leg) SetGoal(p math3d.Vector3) {
 
 	r := femur.Start()
 	t := r
-	t.Y = -50
+	t.Y = -50 // totally arbitrary length, just to figure out angles.
 
-	a := 100.0 // femur length
-	b := 85.0  // tibia length
-	c := 64.0  // tarsus length
+	a := femurLength
+	b := tibiaLength
+	c := tarsusLength
 	d := r.Distance(*vv)
 	e := r.Distance(*v)
 	f := r.Distance(t)
@@ -187,5 +238,5 @@ func (leg *Leg) SetGoal(p math3d.Vector3) {
 	leg.Coxa.MoveTo(coxaAngle)
 	leg.Femur.MoveTo(0 - femurAngle)
 	leg.Tibia.MoveTo(tibiaAngle)
-	leg.Tarsus.MoveTo(tarsusAngle)
+	leg.Tarsus.MoveTo(tarsusAngle + tarsusExtraAngle)
 }

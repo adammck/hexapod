@@ -74,7 +74,7 @@ func NewHexapod(network *network.Network) *Hexapod {
 			proto1.New(network),
 		},
 		State: &State{
-			FPS: 30,
+			FPS: 0,
 			Pose: math3d.Pose{
 				Position: math3d.ZeroVector3,
 				Heading:  0,

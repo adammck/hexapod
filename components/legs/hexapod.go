@@ -23,6 +23,9 @@ const (
 	sStanding State = "sStanding"
 	sStepping State = "sStepping"
 
+	moveSpeedSlow = 32
+	moveSpeedFast = 1023
+
 	// The distance which the underside of the body should be raised off of the
 	// ground when standing.
 	defaultStandingClearance = 40.0
@@ -118,20 +121,20 @@ func New(n *network.Network) *Legs {
 		},
 	}
 
-	// TODO: We're initializing the position to zero here, but that prevents us
-	//       from settings the actual location of the hex at boot. Should we
-	//       provide the initial state to these constructors?
-	l.feet = [6]math3d.Vector3{
-		l.homeFootPosition(l.Legs[0], math3d.Pose{}),
-		l.homeFootPosition(l.Legs[1], math3d.Pose{}),
-		l.homeFootPosition(l.Legs[2], math3d.Pose{}),
-		l.homeFootPosition(l.Legs[3], math3d.Pose{}),
-		l.homeFootPosition(l.Legs[4], math3d.Pose{}),
-		l.homeFootPosition(l.Legs[5], math3d.Pose{}),
-	}
+	// Initialize the position of each foot to (roughly) its current position,
+	// by fetching the angle of each servo. They could be all over the place,
+	// because we're booting up.
+	for i, leg := range l.Legs {
+		v, err := leg.PresentPosition()
 
-	for i, _ := range l.feet {
-		l.lastFeet[i] = l.feet[i]
+		// ಠ_ಠ
+		if err != nil {
+			panic(err)
+		}
+
+		log.Infof("%s initialized at %v", leg.Name, v)
+		l.lastFeet[i] = v
+		l.feet[i] = v
 	}
 
 	// Reset the state, to set the timer.
@@ -150,6 +153,21 @@ func (l *Legs) SetState(s State) {
 	l.stateCounter = 0
 	l.stateTime = time.Now()
 	l.State = s
+}
+
+// SetMovingSpeed sets the moving speed of all leg servos. This is only useful
+// during startup; most of the time, the speed should be constant.
+func (l *Legs) SetMovingSpeed(speed int) error {
+	for _, leg := range l.Legs {
+		for _, servo := range leg.Servos() {
+			err := servo.SetMovingSpeed(speed)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
 }
 
 // Clearance returns the distance (on the Y axis) which the body should be off
@@ -176,7 +194,59 @@ func (l *Legs) Tick(now time.Time, state *hexapod.State) error {
 		return nil
 
 	case sDefault:
-		l.SetState(sStandUp)
+		if state.Shutdown {
+			l.SetState(sSitDown)
+			break
+		}
+
+		if l.stateCounter == 1 {
+
+			// Set all servos very slow
+			err := l.SetMovingSpeed(moveSpeedSlow)
+			if err != nil {
+				return err
+			}
+
+			// Set the target for each foot to its home position.
+			for i, leg := range l.Legs {
+				l.feet[i] = l.homeFootPosition(leg, state.Pose)
+			}
+		}
+
+		// Count the total distance between the actual foot positions and the
+		// target/home positions set above. We use this to wait indefinitely
+		// until each foot has reached its destination.
+
+		var td float64
+		for i, leg := range l.Legs {
+			pv, err := leg.PresentPosition()
+			if err != nil {
+				log.Error(err)
+				continue
+			}
+
+			//log.Infof("%s end is at: %v (home=%v, distance=%+07.2f)", leg.Name, pv, l.feet[i], pv.Distance(hv))
+			td += pv.Distance(l.feet[i])
+		}
+
+		// If the total distance is within the margin of error, reset move speed
+		// (now that we know it won't be jerky, because the feet are already at
+		// their destination), and proceed to stand up.
+
+		if td < 5*6 {
+
+			err := l.SetMovingSpeed(moveSpeedFast)
+			if err != nil {
+				return err
+			}
+
+			l.SetState(sStandUp)
+			break
+		}
+
+		if l.stateCounter%10 == 0 {
+			log.Infof("distance to home positions: %+07.2f", td)
+		}
 
 	// After initialzation, raise the clearance to lift the body off the
 	// ground, into the standing position.
@@ -204,7 +274,7 @@ func (l *Legs) Tick(now time.Time, state *hexapod.State) error {
 	case sSitDown:
 		if l.stateCounter == 1 {
 			l.lastPose = state.Pose
-			state.Target.Position.Y = 0.0
+			state.Target.Position.Y = -2.0
 		}
 
 		d := float64(time.Since(l.stateTime)) / float64(sitStandDuration)
