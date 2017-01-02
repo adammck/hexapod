@@ -2,30 +2,33 @@ package main
 
 import (
 	"flag"
+
 	log "github.com/Sirupsen/logrus"
 	"github.com/adammck/dynamixel/network"
 	"github.com/adammck/hexapod"
 	"github.com/adammck/hexapod/components/controller"
 	"github.com/adammck/hexapod/components/head"
 	"github.com/adammck/hexapod/components/legs"
-	"github.com/adammck/hexapod/components/voltage"
-	fake_serial "github.com/adammck/hexapod/fake/serial"
-	fake_voltage "github.com/adammck/hexapod/fake/voltage"
-	"github.com/adammck/hexapod/math3d"
-	"github.com/adammck/hexapod/servos"
-	"github.com/jacobsa/go-serial/serial"
 	"io"
 	"io/ioutil"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/adammck/hexapod/components/voltage"
+	fake_serial "github.com/adammck/hexapod/fake/serial"
+	fake_voltage "github.com/adammck/hexapod/fake/voltage"
+	"github.com/adammck/hexapod/math3d"
+	"github.com/adammck/hexapod/servos"
+	"github.com/jacobsa/go-serial/serial"
 )
 
 var (
 	serialPort     = flag.String("serial-port", "/dev/ttyACM0", "path to the serial port")
 	controllerPort = flag.String("controller-port", "/dev/input/event0", "path to the sixaxis controller")
 	debug          = flag.Bool("debug", false, "enable verbose logging")
+	httpPort       = flag.Int("http-port", 8000, "port to start HTTP server on")
 	offline        = flag.Bool("offline", false, "run in offline mode (with fake devices)")
 	fps            = flag.Int("fps", 60, "set the number of frames per second")
 )
@@ -84,6 +87,13 @@ func main() {
 	log.Infof("initializing loop at %dfps", *fps)
 	ticker := time.NewTicker(time.Duration(1000000000 / *fps))
 
+	if *httpPort > 0 {
+		log.Info("starting HTTP interface")
+		go h.RunServer(*httpPort)
+	} else {
+		log.Warn("HTTP interface disabled")
+	}
+
 	log.Info("creating components")
 	l := legs.New(network)
 	h.Add(l)
@@ -122,7 +132,7 @@ func main() {
 		log.Fatalf("error while initializing servo #72: %s", err)
 	}
 	h.Add(head.New(
-		math3d.Pose{math3d.Vector3{X: 0, Y: 43.0, Z: 70}, 0},
+		math3d.Pose{math3d.Vector3{X: 0, Y: 43.0, Z: 70}, 0, 0, 0},
 		headH,
 		headV))
 

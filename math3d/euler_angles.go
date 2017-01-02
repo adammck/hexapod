@@ -6,9 +6,9 @@ import (
 )
 
 type EulerAngles struct {
-	Heading float64 // y
-	Pitch   float64 // x
-	Bank    float64 // z
+	Heading float64 // y, yaw
+	Pitch   float64 // x, pitch
+	Bank    float64 // z, roll
 }
 
 type rotation int

@@ -2,11 +2,14 @@ package hexapod
 
 import (
 	"fmt"
+	"net/http"
+	"time"
+
+	"github.com/Sirupsen/logrus"
 	"github.com/adammck/dynamixel/iface"
 	"github.com/adammck/dynamixel/network"
 	proto1 "github.com/adammck/dynamixel/protocol/v1"
 	"github.com/adammck/hexapod/math3d"
-	"time"
 )
 
 type State struct {
@@ -35,14 +38,16 @@ type State struct {
 
 // World returns a matrix to transform a vector in the coordinate space defined
 // by the Position and Rotation attributes into the world space.
+// TODO: Remove this method.
 func (s *State) World() math3d.Matrix44 {
-	return *math3d.MakeMatrix44(s.Pose.Position, *math3d.MakeSingularEulerAngle(math3d.RotationHeading, s.Pose.Heading))
+	return s.Pose.ToWorld()
 }
 
 // Local returns a matrix to transform a vector in the world coordinate space
 // into the space defined by the state (using the Position and Rotation attrs).
+// TODO: Remove this method.
 func (s *State) Local() math3d.Matrix44 {
-	return s.World().Inverse()
+	return s.Pose.ToLocal()
 }
 
 type Hexapod struct {
@@ -63,6 +68,7 @@ type Hexapod struct {
 type Component interface {
 	Boot() error
 	Tick(time.Time, *State) error
+	//Config() interface{}
 }
 
 // NewHexapod creates a new Hexapod object on the given Dynamixel network.
@@ -109,6 +115,11 @@ func (h *Hexapod) Boot() error {
 // trigger any buffered instructions.
 func (h *Hexapod) Tick(now time.Time, state *State) error {
 	for _, c := range h.Components {
+
+		logrus.WithFields(logrus.Fields{
+			"pkg": "hexapod",
+		}).Debugf("Tick: %T", c)
+
 		err := c.Tick(now, state)
 		if err != nil {
 			return fmt.Errorf("%T.Tick returned error: %v", c, err)
@@ -120,4 +131,26 @@ func (h *Hexapod) Tick(now time.Time, state *State) error {
 	}
 
 	return nil
+}
+
+// TODO: Move this stuff to a separate package.
+
+var log = logrus.WithFields(logrus.Fields{
+	"pkg": "http",
+})
+
+// Remote starts an HTTP server which can update the configuration. It blocks
+// forever, so start it in a goroutine.
+func (h *Hexapod) RunServer(port int) {
+	indexHTML := ""
+
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		fmt.Fprintf(w, "<pre>%s</pre>", indexHTML)
+	})
+
+	addr := fmt.Sprintf(":%d", port)
+	log.Infof("listening on %s", addr)
+	err := http.ListenAndServe(addr, nil)
+	panic(err)
 }

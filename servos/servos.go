@@ -27,11 +27,6 @@ func New(n *network.Network, ID int) (*servo.Servo, error) {
 		return nil, fmt.Errorf("%s (while setting return level)", err)
 	}
 
-	err = s.Ping()
-	if err != nil {
-		return nil, fmt.Errorf("%s (while pinging)", err)
-	}
-
 	// Add to the pool as soon as we know the servo is available, to ensure that
 	// we power it down at shutdown even if the next lines fail.
 	servos = append(servos, s)
@@ -40,17 +35,6 @@ func New(n *network.Network, ID int) (*servo.Servo, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%s (while setting return delay)", err)
 	}
-
-	// Note: This enables torque, so we don't need to do that separately.
-	err = s.SetMovingSpeed(1023)
-	if err != nil {
-		return nil, fmt.Errorf("%s (while setting move speed)", err)
-	}
-
-	// Buffer all subsequent instructions. The ACTION command is issued at the
-	// end of each tick. Note that this is just an attribute of the servo; it
-	// doesn't affect the actual control table, so doesn't need un-setting.
-	s.SetBuffered(true)
 
 	return s, nil
 }
@@ -62,7 +46,17 @@ func Shutdown() {
 	for _, s := range servos {
 		s.SetBuffered(false)
 
-		err := s.SetTorqueEnable(false)
+		err := s.SetMovingSpeed(0)
+		if err != nil {
+			log.Warnf("%s (while resetting moving speed)", err)
+		}
+
+		err = s.SetTorqueLimit(0)
+		if err != nil {
+			log.Warnf("%s (while resetting torque limit)", err)
+		}
+
+		err = s.SetTorqueEnable(false)
 		if err != nil {
 			log.Warnf("%s (while disabling torque)", err)
 		}

@@ -1,37 +1,75 @@
 package head
 
 import (
-	log "github.com/Sirupsen/logrus"
+	"fmt"
+	"math"
+	"time"
+
+	"github.com/Sirupsen/logrus"
 	"github.com/adammck/dynamixel/servo"
 	"github.com/adammck/hexapod"
 	"github.com/adammck/hexapod/math3d"
 	"github.com/adammck/hexapod/utils"
-	"math"
-	"time"
 )
 
-const (
-	upLimit    = 10
-	downLimit  = -20
-	leftLimit  = -45
-	rightLimit = 45
-)
-
-var logger = log.WithFields(log.Fields{
+var log = logrus.WithFields(logrus.Fields{
 	"pkg": "head",
 })
+
+const (
+	moveSpeed   = 1023
+	torqueLimit = 1023
+)
+
+type Config struct {
+	UpLimit    float64
+	DownLimit  float64
+	LeftLimit  float64
+	RightLimit float64
+}
+
+var defaultConfig = &Config{
+	UpLimit:    10,
+	DownLimit:  -20,
+	LeftLimit:  -45,
+	RightLimit: 45,
+}
 
 type Head struct {
 	o math3d.Pose
 	h *servo.Servo
 	v *servo.Servo
+	c *Config
 }
 
 func New(o math3d.Pose, h, v *servo.Servo) *Head {
-	return &Head{o, h, v}
+	return &Head{o, h, v, defaultConfig}
+}
+
+func (h *Head) Servos() []*servo.Servo {
+	return []*servo.Servo{
+		h.h,
+		h.v,
+	}
 }
 
 func (h *Head) Boot() error {
+	for _, s := range h.Servos() {
+
+		err := s.SetMovingSpeed(moveSpeed)
+		if err != nil {
+			return fmt.Errorf("%s (while setting move speed)", err)
+		}
+
+		err = s.SetTorqueLimit(torqueLimit)
+		if err != nil {
+			return fmt.Errorf("%s (while setting torque limit)", err)
+		}
+
+		// Buffer all moves until end of tick.
+		s.SetBuffered(true)
+	}
+
 	return nil
 }
 
@@ -49,12 +87,12 @@ func (h *Head) Tick(now time.Time, state *hexapod.State) error {
 	// Transform the vector (from the origin to the dest) into horizontal (X)
 	// and vertical (Y) angles. There is no Z between two vectors.
 	x := 0 - utils.Deg(math.Atan(v.X/v.Z))
-	y := utils.Deg(math.Atan(v.Y / v.Z))
+	y := 0 - utils.Deg(math.Atan(v.Y/v.Z))
 
 	// Constrain angles to avoid mechanical damage.
 	// TODO: Encapsulate this in a Servo object, or use the limit registers.
-	x = math.Max(math.Min(x, rightLimit), leftLimit)
-	y = math.Max(math.Min(y, upLimit), downLimit)
+	x = math.Max(math.Min(x, h.c.RightLimit), h.c.LeftLimit)
+	y = math.Max(math.Min(y, h.c.UpLimit), h.c.DownLimit)
 
 	// Update servos every tick.
 	// TODO: Maybe only update if the x/y has changed.
