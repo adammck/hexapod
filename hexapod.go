@@ -10,6 +10,7 @@ import (
 	"github.com/adammck/dynamixel/network"
 	proto1 "github.com/adammck/dynamixel/protocol/v1"
 	"github.com/adammck/hexapod/math3d"
+	"github.com/adammck/hexapod/utils"
 )
 
 type State struct {
@@ -28,7 +29,8 @@ type State struct {
 	Pose math3d.Pose
 
 	// The target pose of the origin, in the world space. This can be set to
-	// instruct the legs to walk towards an arbitrary point.
+	// instruct the legs to walk towards an arbitrary point, and the chassis to
+	// orient itself strangely.
 	Target math3d.Pose
 
 	// The point to aim the head (camera) at, in the world space. This is a
@@ -63,12 +65,14 @@ type Hexapod struct {
 	// react to instructions. This is more easily testable than passing around
 	// references to the Hexapod itself.
 	State *State
+
+	// To count the number of times that Tick is called each second.
+	fc *utils.FrameCounter
 }
 
 type Component interface {
 	Boot() error
 	Tick(time.Time, *State) error
-	//Config() interface{}
 }
 
 // NewHexapod creates a new Hexapod object on the given Dynamixel network.
@@ -91,6 +95,7 @@ func NewHexapod(network *network.Network) *Hexapod {
 			},
 			LookAt: nil,
 		},
+		fc: utils.NewFrameCounter(time.Second),
 	}
 }
 
@@ -113,19 +118,21 @@ func (h *Hexapod) Boot() error {
 
 // Tick calls Tick on each component, then sends the ACTION instruction to
 // trigger any buffered instructions.
-func (h *Hexapod) Tick(now time.Time, state *State) error {
+func (h *Hexapod) Tick(now time.Time) error {
+
+	// Update the fps counter.
+	h.fc.Frame(now)
+	h.State.FPS = h.fc.Count()
+
+	// Send Tick to every component.
 	for _, c := range h.Components {
-
-		logrus.WithFields(logrus.Fields{
-			"pkg": "hexapod",
-		}).Debugf("Tick: %T", c)
-
-		err := c.Tick(now, state)
+		err := c.Tick(now, h.State)
 		if err != nil {
 			return fmt.Errorf("%T.Tick returned error: %v", c, err)
 		}
 	}
 
+	// Trigger any buffered instructions written during this tick.
 	for i := range h.Protocols {
 		h.Protocols[i].Action()
 	}

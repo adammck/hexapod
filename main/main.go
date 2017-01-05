@@ -30,7 +30,7 @@ var (
 	debug          = flag.Bool("debug", false, "enable verbose logging")
 	httpPort       = flag.Int("http-port", 8000, "port to start HTTP server on")
 	offline        = flag.Bool("offline", false, "run in offline mode (with fake devices)")
-	fps            = flag.Int("fps", 60, "set the number of frames per second")
+	fps            = flag.Int("fps", 100, "set the number of frames per second")
 )
 
 func main() {
@@ -172,9 +172,10 @@ func main() {
 	gracePeriod := 2000 * time.Millisecond
 
 	// Run forever
+	// TODO: Move this loop into the hexapod type.
 	log.Info("starting loop")
 	for now := range ticker.C {
-		err = h.Tick(now, h.State)
+		err = h.Tick(now)
 
 		if err != nil {
 			panic(err)
