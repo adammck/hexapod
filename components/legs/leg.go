@@ -91,18 +91,14 @@ func (leg *Leg) SetLED(state bool) {
 	}
 }
 
-// http://en.wikipedia.org/wiki/Solution_of_triangles#Three_sides_given_.28SSS.29
-func _sss(a float64, b float64, c float64) float64 {
-	return utils.Deg(math.Acos(((b * b) + (c * c) - (a * a)) / (2 * b * c)))
-}
-
 // rootSegment returns the segment at the origin of this leg.
 func (leg *Leg) rootSegment() *Segment {
 
 	// The position of the leg in world space must be specified by two segments.
 	// The first positions it, then the second (which is always zero-length)
-	// rotates it into the home orientation.
-	s1 := MakeRootSegment(*math3d.MakeVector3(leg.Origin.X, leg.Origin.Y, leg.Origin.Z))
+	// rotates it into the home orientation. This is the opposite of most
+	// segments, which rotate from their start, rather than their end.
+	s1 := MakeRootSegment(*leg.Origin)
 	return MakeSegment("s2", s1, *math3d.MakeSingularEulerAngle(math3d.RotationHeading, leg.Angle), *math3d.MakeVector3(0, 0, 0))
 }
 
@@ -112,118 +108,135 @@ func (leg *Leg) rootSegment() *Segment {
 func (leg *Leg) PresentPosition() (math3d.Vector3, error) {
 	v := math3d.ZeroVector3
 
-	coxaPos, err := leg.Coxa.Angle()
+	coxPos, err := leg.Coxa.Angle()
 	if err != nil {
 		return v, fmt.Errorf("%s (while getting %s coxa (#%d) position)", err, leg.Name, leg.Coxa.ID)
 	}
 
-	femurPos, err := leg.Femur.Angle()
+	femPos, err := leg.Femur.Angle()
 	if err != nil {
 		return v, fmt.Errorf("%s (while getting %s femur (#%d) position)", err, leg.Name, leg.Femur.ID)
 	}
 
-	tibiaPos, err := leg.Tibia.Angle()
+	tibPos, err := leg.Tibia.Angle()
 	if err != nil {
 		return v, fmt.Errorf("%s (while getting %s tibia (#%d) position)", err, leg.Name, leg.Tibia.ID)
 	}
 
-	tarsusPos, err := leg.Tarsus.Angle()
+	tarPos, err := leg.Tarsus.Angle()
 	if err != nil {
 		return v, fmt.Errorf("%s (while getting %s tarsus (#%d) position)", err, leg.Name, leg.Tarsus.ID)
 	}
 
 	root := leg.rootSegment()
-	coxa := MakeSegment("coxa", root, *math3d.MakeSingularEulerAngle(math3d.RotationHeading, coxaPos), *math3d.MakeVector3(0, coxaOffsetY, coxaOffsetZ))
-	femur := MakeSegment("femur", coxa, *math3d.MakeSingularEulerAngle(math3d.RotationPitch, femurPos), *math3d.MakeVector3(0, 0, femurLength))
-	tibia := MakeSegment("tibia", femur, *math3d.MakeSingularEulerAngle(math3d.RotationPitch, tibiaPos), *math3d.MakeVector3(0, 0, tibiaLength))
-	tarsus := MakeSegment("tarsus", tibia, *math3d.MakeSingularEulerAngle(math3d.RotationPitch, tarsusPos), *math3d.MakeVector3(0, 0, tarsusLength))
+	coxa := MakeSegment("coxa", root, *math3d.MakeSingularEulerAngle(math3d.RotationHeading, coxPos), *math3d.MakeVector3(0, coxaOffsetY, coxaOffsetZ))
+	femur := MakeSegment("femur", coxa, *math3d.MakeSingularEulerAngle(math3d.RotationPitch, femPos), *math3d.MakeVector3(0, 0, femurLength))
+	tibia := MakeSegment("tibia", femur, *math3d.MakeSingularEulerAngle(math3d.RotationPitch, tibPos), *math3d.MakeVector3(0, 0, tibiaLength))
+	tarsus := MakeSegment("tarsus", tibia, *math3d.MakeSingularEulerAngle(math3d.RotationPitch, tarPos), *math3d.MakeVector3(0, 0, tarsusLength))
 
 	return tarsus.End(), nil
 }
 
-// Sets the goal position of this leg to the given x/y/z coords in the hexapod
-// space. (Note that this also includes the orientation on all three axis.)
-func (leg *Leg) SetGoal(v math3d.Vector3) {
+// SetGoal sets the goal position of the leg to the given vector in the chassis
+// coordinate space.
+func (leg *Leg) SetGoal(vt math3d.Vector3) {
 
 	// Solve the angle of the coxa by looking at the position of the target from
-	// above (x,z). It's the only joint which rotates around the Y axis, so we
-	// can cheat.
+	// above (x,z). Note that "above" here is in the chassis space, which might
+	// not be parallel to the actual ground. Fortunately, the coxa moves around
+	// the Y axis in that space, so we can cheat with 2d trig.
 
-	opp := v.X - leg.Origin.X
-	adj := v.Z - leg.Origin.Z
-	theta := utils.Deg(math.Atan2(opp, adj))
-	coxaAngle := theta - leg.Angle
+	coxPos := utils.Deg(math.Atan2(vt.X-leg.Origin.X, vt.Z-leg.Origin.Z)) - leg.Angle
 
-	// Solve the other joints with a bunch of trig. Since we've already set the Y
-	// rotation and the other joints only rotate around X (relative to the coxa,
-	// anyway), we can solve them with a shitload of triangles.
+	// The other joints are all on the same plane, which we know intersects vt
+	// from the above. So the rest of the function can use 2d trig on the (z,y)
+	// axis in the coxa space. More cheating!
 
 	root := leg.rootSegment()
-	coxa := MakeSegment("coxa", root, *math3d.MakeSingularEulerAngle(math3d.RotationHeading, coxaAngle), *math3d.MakeVector3(0, coxaOffsetY, coxaOffsetZ))
-	r := coxa.End()
+	coxa := MakeSegment("coxa", root, *math3d.MakeSingularEulerAngle(math3d.RotationHeading, coxPos), *math3d.MakeVector3(0, coxaOffsetY, coxaOffsetZ))
 
-	// totally arbitrary point below femur origin, just to figure out angles.
-	t := *r.Add(math3d.Vector3{X: 0, Y: -50, Z: 0})
-	//t.Y = -50 // TODO: can this be r.Y-50? absolute seems like a bad idea
-
-	// tarsus is known to be directly above foot.
-	vv := v.Add(math3d.Vector3{X: 0, Y: tarsusLength, Z: 0})
-
+	// The following points (vr,vt) and lengths (a,b,c) are known:
+	//
+	//         (?)
+	//         / \
+	//        /   \
+	//       a     b
+	//      /       \
+	//     /         \
+	//   (vr)        (?)
+	//                |
+	//                c
+	//                |
+	//              (vt)
+	//
+	vr := coxa.End()
 	a := femurLength
 	b := tibiaLength
 	c := tarsusLength
-	d := r.Distance(*vv)
-	e := r.Distance(v)
-	f := r.Distance(t) // always be r.Y-50?
-	g := t.Distance(v)
 
-	aa := _sss(b, a, d) //
-	bb := _sss(c, d, e) // angle between f and a (femur)
-	cc := _sss(g, e, f) //
+	// Pick a totally arbitrary point below (vr), to make more triangles.
+	vp := *vr.Add(math3d.Vector3{X: 0, Y: -50, Z: 0})
 
-	dd := _sss(a, d, b) // angle between b and c (tarsus)
-	ee := _sss(e, c, d) //
+	// The tarsus joint should always be directly above the target. We want that
+	// last segment to be perpendicular to the ground, because it looks cool.
+	vq := *vt.Add(math3d.Vector3{X: 0, Y: tarsusLength, Z: 0})
 
-	hh := 180 - (aa + dd) // between a, b (tibia)
+	// The leg now looks like:
+	//
+	//         (?)
+	//         / \
+	//        /   \
+	//       a     b
+	//      /       \
+	//     /         \
+	//   (vr)       (vq)
+	//    |           |
+	//   (vp)         c
+	//                |
+	//              (vt)
+	//
 
-	femurAngle := 90 - (aa + bb + cc)
-	tibiaAngle := 180 - hh
-	tarsusAngle := 180 - (dd + ee)
+	// Calculate the length of the remaining edges.
+	d := vr.Distance(vq)
+	e := vr.Distance(vt)
+	f := vr.Distance(vp) // always vr.Y-50?
+	g := vp.Distance(vt)
 
-	//logrus.Errorf("%s femur angle: %0.2f", leg.Name, femurAngle)
-	//logrus.Errorf("%s tibia angle: %0.2f", leg.Name, tibiaAngle)
-	//logrus.Errorf("%s tarsus angle: %0.2f", leg.Name, tarsusAngle)
-	//return
+	// Calculate the inner angles of the triangles using the law of cos.
+	aa := sss(b, a, d)
+	bb := sss(c, d, e)
+	cc := sss(g, e, f)
+	dd := sss(a, d, b)
+	ee := sss(e, c, d)
+	hh := 180 - (aa + dd)
 
-	// fmt.Printf("v=%v, vv=%v, r=%v, t=%v\n", v, vv, r, t)
-	// fmt.Printf("a=%0.4f, b=%0.4f, c=%0.4f, d=%0.4f, e=%0.4f, f=%0.4f, g=%0.4f\n", a, b, c, d, e, f, g)
-	// fmt.Printf("aa=%0.4f, bb=%0.4f, cc=%0.4f, dd=%0.4f, ee=%0.4f\n", aa, bb, cc, dd, ee)
-	// fmt.Printf("coxaAngle=%0.4f (s/o=%0.4f) (s/v=%0.4f) (e/o=%0.4f) (e/v=%0.4f)\n", coxaAngle, coxa.Start().Distance(ik.ZeroVector3), coxa.Start().Distance(*v), coxa.End().Distance(ik.ZeroVector3), coxa.End().Distance(*v))
-	// fmt.Printf("femurAngle=%0.4f (s/o=%0.4f) (s/v=%0.4f) (e/o=%0.4f) (e/v=%0.4f)\n", femurAngle, femur.Start().Distance(ik.ZeroVector3), femur.Start().Distance(*v), femur.End().Distance(ik.ZeroVector3), femur.End().Distance(*v))
-	// fmt.Printf("tibiaAngle=%0.4f (s/o=%0.4f) (s/v=%0.4f) (e/o=%0.4f) (e/v=%0.4f)\n", tibiaAngle, tibia.Start().Distance(ik.ZeroVector3), tibia.Start().Distance(*v), tibia.End().Distance(ik.ZeroVector3), tibia.End().Distance(*v))
-	// fmt.Printf("tarsusAngle=%0.4f (s/o=%0.4f) (s/v=%0.4f) (e/o=%0.4f) (e/v=%0.4f)\n", tarsusAngle, tarsus.Start().Distance(ik.ZeroVector3), tarsus.Start().Distance(*v), tarsus.End().Distance(ik.ZeroVector3), tarsus.End().Distance(*v))
+	// Transform inner angles to servo angles. The zero angle of each servo
+	// makes the leg stick directly outwards from the chassis.
+	femPos := 90 - (aa + bb + cc)
+	tibPos := 180 - hh
+	tarPos := 180 - (dd + ee)
 
-	//logrus.Infof("%s coxa=%0.2f, femur=%0.2f, tibia=%0.2f, tarsus=%0.2f", leg.Name, coxaAngle, femurAngle, tibiaAngle, tarsusAngle)
+	// Crash if any of the angles are invalid.
 
 	err := false
 
-	if math.IsNaN(coxaAngle) {
-		logrus.Errorf("invalid %s coxa angle: %0.2f", leg.Name, coxaAngle)
+	if math.IsNaN(coxPos) {
+		logrus.Errorf("invalid %s coxa angle: %0.2f", leg.Name, coxPos)
 		err = true
 	}
 
-	if math.IsNaN(femurAngle) {
-		logrus.Errorf("invalid %s femur angle: %0.2f", leg.Name, femurAngle)
+	if math.IsNaN(femPos) {
+		logrus.Errorf("invalid %s femur angle: %0.2f", leg.Name, femPos)
 		err = true
 	}
 
-	if math.IsNaN(tibiaAngle) {
-		logrus.Errorf("invalid %s tibia angle: %0.2f", leg.Name, tibiaAngle)
+	if math.IsNaN(tibPos) {
+		logrus.Errorf("invalid %s tibia angle: %0.2f", leg.Name, tibPos)
 		err = true
 	}
 
-	if math.IsNaN(tarsusAngle) {
-		logrus.Errorf("invalid %s tarsus angle: %0.2f", leg.Name, tarsusAngle)
+	if math.IsNaN(tarPos) {
+		logrus.Errorf("invalid %s tarsus angle: %0.2f", leg.Name, tarPos)
 		err = true
 	}
 
@@ -235,8 +248,15 @@ func (leg *Leg) SetGoal(v math3d.Vector3) {
 		panic("goal out of range")
 	}
 
-	leg.Coxa.MoveTo(coxaAngle)
-	leg.Femur.MoveTo(femurAngle)
-	leg.Tibia.MoveTo(tibiaAngle)
-	leg.Tarsus.MoveTo(tarsusAngle)
+	// Move the servos!
+	leg.Coxa.MoveTo(coxPos)
+	leg.Femur.MoveTo(femPos)
+	leg.Tibia.MoveTo(tibPos)
+	leg.Tarsus.MoveTo(tarPos)
+}
+
+// sss returns the angle α, given the length of sides a, b, and c.
+// See: http://en.wikipedia.org/wiki/Solution_of_triangles
+func sss(a float64, b float64, c float64) float64 {
+	return utils.Deg(math.Acos(((b * b) + (c * c) - (a * a)) / (2 * b * c)))
 }
