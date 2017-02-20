@@ -31,6 +31,11 @@ func New(n *network.Network, ID int) (*servo.Servo, error) {
 	// we power it down at shutdown even if the next lines fail.
 	servos = append(servos, s)
 
+	err = s.Ping()
+	if err != nil {
+		return nil, fmt.Errorf("%s (while pinging)", err)
+	}
+
 	err = s.SetReturnDelayTime(0)
 	if err != nil {
 		return nil, fmt.Errorf("%s (while setting return delay)", err)
@@ -44,8 +49,6 @@ func New(n *network.Network, ID int) (*servo.Servo, error) {
 // indefinitely.
 func Shutdown() {
 	for _, s := range servos {
-		s.SetBuffered(false)
-
 		err := s.SetMovingSpeed(0)
 		if err != nil {
 			log.Warnf("%s (while resetting moving speed)", err)
@@ -66,4 +69,17 @@ func Shutdown() {
 			log.Warnf("%s (while disabling LED)", err)
 		}
 	}
+}
+
+// TODO: Call SetGoalPosition here, remove MoveTo from Dynamixel library.
+func RegMoveTo(s *servo.Servo, angle float64) error {
+
+	// If the servo isn't in buffered mode, enable it for the duration of this
+	// method. This is a stupid hack.
+	if !s.Buffered {
+		s.SetBuffered(true)
+		defer s.SetBuffered(false)
+	}
+
+	return s.MoveTo(angle)
 }

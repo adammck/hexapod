@@ -26,11 +26,11 @@ import (
 
 var (
 	serialPort     = flag.String("serial-port", "/dev/ttyACM0", "path to the serial port")
-	controllerPort = flag.String("controller-port", "/dev/input/event0", "path to the sixaxis controller")
+	controllerPort = flag.String("controller-port", "/dev/input/event1", "path to the sixaxis controller")
 	debug          = flag.Bool("debug", false, "enable verbose logging")
 	httpPort       = flag.Int("http-port", 8000, "port to start HTTP server on")
 	offline        = flag.Bool("offline", false, "run in offline mode (with fake devices)")
-	fps            = flag.Int("fps", 100, "set the number of frames per second")
+	fps            = flag.Int("fps", 60, "set the number of frames per second")
 )
 
 func main() {
@@ -82,7 +82,7 @@ func main() {
 		})
 	}
 
-	h := hexapod.NewHexapod(network)
+	h := hexapod.NewHexapod(network, *fps)
 
 	log.Infof("initializing loop at %dfps", *fps)
 	ticker := time.NewTicker(time.Duration(1000000000 / *fps))

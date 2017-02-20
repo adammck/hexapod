@@ -15,7 +15,7 @@ const (
 	// The number of seconds between voltage checks. These are pretty quick, but
 	// not instant. Running at low voltage for too long will damage the battery,
 	// so it should be checked pretty regularly.
-	interval = 5
+	interval = 15
 
 	// The voltage at which the hexapod should shut down.
 	minimum = 9.6

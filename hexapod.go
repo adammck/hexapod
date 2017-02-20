@@ -28,6 +28,10 @@ type State struct {
 	// be updated as accurately as possible as the hex walks around.
 	Pose math3d.Pose
 
+	// The offset from the actual home position which the feet should be
+	// positioned at.
+	Offset math3d.Vector3
+
 	// The target pose of the origin, in the world space. This can be set to
 	// instruct the legs to walk towards an arbitrary point, and the chassis to
 	// orient itself strangely.
@@ -36,20 +40,29 @@ type State struct {
 	// The point to aim the head (camera) at, in the world space. This is a
 	// pointer so it can be set to nil if there is no target.
 	LookAt *math3d.Vector3
+
+	// The index of the gait which should be used, mod however many gaits are
+	// available. (This doesn't really belong here, but is the simplest way to
+	// pass the selection from the controller to the chassis and I am lazy.)
+	GaitIndex int
+
+	// The increase (or decrease, if negative) from the default speed at which
+	// we should walk. There is no unit; more is just faster.
+	Speed int
 }
 
 // World returns a matrix to transform a vector in the coordinate space defined
 // by the Position and Rotation attributes into the world space.
 // TODO: Remove this method.
 func (s *State) World() math3d.Matrix44 {
-	return s.Pose.ToWorld()
+	return s.Pose.Add(math3d.Pose{s.Offset, 0, 0, 0}).ToWorld()
 }
 
 // Local returns a matrix to transform a vector in the world coordinate space
 // into the space defined by the state (using the Position and Rotation attrs).
 // TODO: Remove this method.
 func (s *State) Local() math3d.Matrix44 {
-	return s.Pose.ToLocal()
+	return s.Pose.Add(math3d.Pose{s.Offset, 0, 0, 0}).ToLocal()
 }
 
 type Hexapod struct {
@@ -66,8 +79,15 @@ type Hexapod struct {
 	// references to the Hexapod itself.
 	State *State
 
+	// The FPS which the main loop should try to run at.
+	TargetFPS int
+
 	// To count the number of times that Tick is called each second.
 	fc *utils.FrameCounter
+
+	// The time at which an FPS warning was last logged. To avoid flooding the
+	// logs if we're running too slowly.
+	prevWarnFPS time.Time
 }
 
 type Component interface {
@@ -76,7 +96,7 @@ type Component interface {
 }
 
 // NewHexapod creates a new Hexapod object on the given Dynamixel network.
-func NewHexapod(network *network.Network) *Hexapod {
+func NewHexapod(network *network.Network, targetFPS int) *Hexapod {
 	return &Hexapod{
 		Network:    network,
 		Components: []Component{},
@@ -89,13 +109,17 @@ func NewHexapod(network *network.Network) *Hexapod {
 				Position: math3d.ZeroVector3,
 				Heading:  0,
 			},
+			Offset: math3d.Vector3{0, 0, 0},
 			Target: math3d.Pose{
 				Position: math3d.ZeroVector3,
 				Heading:  0,
 			},
-			LookAt: nil,
+			LookAt:    nil,
+			GaitIndex: 0,
+			Speed:     0,
 		},
-		fc: utils.NewFrameCounter(time.Second),
+		TargetFPS: targetFPS,
+		fc:        utils.NewFrameCounter(time.Second),
 	}
 }
 
@@ -113,12 +137,24 @@ func (h *Hexapod) Boot() error {
 		}
 	}
 
+	// Trigger any buffered instructions written during boot.
+	h.ActionInstruction()
+
 	return nil
 }
+
+var log = logrus.WithFields(logrus.Fields{
+	"pkg": "hex",
+})
 
 // Tick calls Tick on each component, then sends the ACTION instruction to
 // trigger any buffered instructions.
 func (h *Hexapod) Tick(now time.Time) error {
+
+	// Lock the network during tick. Any other goroutines wanting to hit the
+	// network (e.g. legs.waitForReady) must first acquire the lock.
+	h.Network.Lock()
+	defer h.Network.Unlock()
 
 	// Update the fps counter.
 	h.fc.Frame(now)
@@ -132,9 +168,25 @@ func (h *Hexapod) Tick(now time.Time) error {
 		}
 	}
 
+	if h.State.FPS < h.TargetFPS {
+		if now.Sub(h.prevWarnFPS) > 5*time.Second {
+			log.Warnf("fps=%d, target=%d", h.State.FPS, h.TargetFPS)
+			h.prevWarnFPS = now
+		}
+	}
+
 	// Trigger any buffered instructions written during this tick.
+	h.ActionInstruction()
+
+	return nil
+}
+
+func (h *Hexapod) ActionInstruction() error {
 	for i := range h.Protocols {
-		h.Protocols[i].Action()
+		err := h.Protocols[i].Action()
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -142,7 +194,7 @@ func (h *Hexapod) Tick(now time.Time) error {
 
 // TODO: Move this stuff to a separate package.
 
-var log = logrus.WithFields(logrus.Fields{
+var log2 = logrus.WithFields(logrus.Fields{
 	"pkg": "http",
 })
 
@@ -157,7 +209,7 @@ func (h *Hexapod) RunServer(port int) {
 	})
 
 	addr := fmt.Sprintf(":%d", port)
-	log.Infof("listening on %s", addr)
+	log2.Infof("listening on %s", addr)
 	err := http.ListenAndServe(addr, nil)
 	panic(err)
 }

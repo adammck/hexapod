@@ -9,6 +9,7 @@ import (
 	"github.com/adammck/dynamixel/servo"
 	"github.com/adammck/hexapod"
 	"github.com/adammck/hexapod/math3d"
+	"github.com/adammck/hexapod/servos"
 	"github.com/adammck/hexapod/utils"
 )
 
@@ -65,9 +66,6 @@ func (h *Head) Boot() error {
 		if err != nil {
 			return fmt.Errorf("%s (while setting torque limit)", err)
 		}
-
-		// Buffer all moves until end of tick.
-		s.SetBuffered(true)
 	}
 
 	return nil
@@ -96,7 +94,7 @@ func (h *Head) Tick(now time.Time, state *hexapod.State) error {
 
 	// Update servos every tick.
 	// TODO: Maybe only update if the x/y has changed.
-	h.h.MoveTo(x)
-	h.v.MoveTo(y)
+	servos.RegMoveTo(h.h, x)
+	servos.RegMoveTo(h.v, y)
 	return nil
 }

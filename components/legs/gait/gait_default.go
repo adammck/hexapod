@@ -4,9 +4,9 @@ import (
 	"math"
 )
 
-func TheGait(ticksPerStep int) Gait {
-	ticksPerStepCycle := ticksPerStep * 3
-	cc := curveCenters(2, ticksPerStepCycle)
+func TheGait(groupSize int, ticksPerStep int) Gait {
+	ticksPerStepCycle := ticksPerStep * (6 / groupSize)
+	cc := curveCenters(groupSize, ticksPerStepCycle)
 
 	var legs [numLegs]Frames
 	for i := 0; i < numLegs; i += 1 {

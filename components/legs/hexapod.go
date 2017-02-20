@@ -21,8 +21,8 @@ const (
 	sSitDown  State = "sSitDown"
 	sStepping State = "sStepping"
 
-	moveSpeedSlow   = 256
-	torqueLimitSlow = 128
+	moveSpeedSlow   = 512
+	torqueLimitSlow = 256
 
 	moveSpeedFast   = 1023
 	torqueLimitFast = 1023
@@ -31,8 +31,8 @@ const (
 	// tick. This mostly controls the time it takes to stand up and sit down.
 	yMoveSpeed = 1
 
-	bankMoveSpeed  = 1
-	pitchMoveSpeed = 1
+	bankMoveSpeed  = 0.5
+	pitchMoveSpeed = 0.5
 
 	// Distance (on the X/Z axis) from the origin to the point at which the feet
 	// should be positioned. This isn't adjustable at runtime, because there are
@@ -41,19 +41,28 @@ const (
 
 	// The number of ticks per step, i.e. a single foot is lifted, moved to its
 	// new position, and put down.
-	ticksPerStep = 20
+	baseTicksPerStep = 20
+
+	// The minimum number of ticks allowed per step.
+	minTicksPerStep = 4
+
+	// The maximum number of ticks allowed per step.
+	maxTicksPerStep = 80
 
 	// The offset (on the Y axis) which feet should be moved to on the up step,
 	// relative to the origin.
 	stepHeight = 40.0
 
-	// Minimum distance which the desired foot position should be from its actual
-	// position before a step should be taken to correct it.
+	// Minimum distance which the desired foot position should be from its
+	// actual position before a step should be taken to correct it.
 	minStepDistance = 20.0
+
+	// Minimum distance to turn (heading), before making a step.
+	minTurnDistance = 5.0
 
 	// The distance (in mm) which the hex can move per step cycle. This should
 	// be determined experimentally; too high and the legs get tangled up.
-	maxStepDistance = 70.0
+	maxStepDistance = 90.0
 )
 
 type Legs struct {
@@ -104,7 +113,6 @@ var log = logrus.WithFields(logrus.Fields{
 func New(n *network.Network) *Legs {
 	l := &Legs{
 		Network: n,
-		Gait:    gait.TheGait(ticksPerStep),
 		Legs: [6]*Leg{
 
 			// Leg origins are relative to the hexapod origin, which is the X/Z
@@ -126,12 +134,12 @@ func New(n *network.Network) *Legs {
 	// Initialize each foot to its home position. This will be written to the
 	// servos during boot.
 	l.feet = [6]math3d.Vector3{
-		l.homeFootPosition(l.Legs[0], math3d.Pose{}),
-		l.homeFootPosition(l.Legs[1], math3d.Pose{}),
-		l.homeFootPosition(l.Legs[2], math3d.Pose{}),
-		l.homeFootPosition(l.Legs[3], math3d.Pose{}),
-		l.homeFootPosition(l.Legs[4], math3d.Pose{}),
-		l.homeFootPosition(l.Legs[5], math3d.Pose{}),
+		l.homeFootPosition(&math3d.ZeroVector3, l.Legs[0], math3d.Pose{}),
+		l.homeFootPosition(&math3d.ZeroVector3, l.Legs[1], math3d.Pose{}),
+		l.homeFootPosition(&math3d.ZeroVector3, l.Legs[2], math3d.Pose{}),
+		l.homeFootPosition(&math3d.ZeroVector3, l.Legs[3], math3d.Pose{}),
+		l.homeFootPosition(&math3d.ZeroVector3, l.Legs[4], math3d.Pose{}),
+		l.homeFootPosition(&math3d.ZeroVector3, l.Legs[5], math3d.Pose{}),
 	}
 
 	// Reset the state, to set the timer.
@@ -140,52 +148,47 @@ func New(n *network.Network) *Legs {
 	return l
 }
 
-// TODO: Maybe provide State to boot, in case we have an initial pose? We're
-//       using the zero value now, which seems like a shaky assumption.
-func (l *Legs) Boot() error {
+func (l *Legs) makeGait(index, speed int) error {
+	idx := (index % 3) + 1
+	tps := clamp(minTicksPerStep, maxTicksPerStep, baseTicksPerStep-(speed*2))
+	log.Infof("Gait: index=%d, tps=%d", idx, tps)
+	l.Gait = gait.TheGait(idx, tps)
+	return nil
+}
 
-	// Set all servos very slow. Note that buffered mode is not enabled yet, so
-	// this is applied immediately.
+func (l *Legs) distanceFromHome() (float64, error) {
+	var td float64
 
-	for _, s := range l.Servos() {
+	// This isn't usually necessary, but since we're (probably) running outside
+	// of the main loop, we need to lock the network to avoid crosstalk.
+	l.Network.Lock()
+	defer l.Network.Unlock()
 
-		err := s.SetMovingSpeed(moveSpeedSlow)
-		if err != nil {
-			return fmt.Errorf("%s (while setting move speed)", err)
-		}
-
-		err = s.SetTorqueLimit(torqueLimitSlow)
-		if err != nil {
-			return fmt.Errorf("%s (while setting torque limit)", err)
-		}
-	}
-
-	// Set the target for each foot to its home position.
+	// Sum the total distance between the actual foot positions and the target
+	// positions. We use this to wait until each foot has reached its target.
 	for i, leg := range l.Legs {
-		leg.SetGoal(l.feet[i])
+		pv, err := leg.PresentPosition()
+		if err != nil {
+			return 0, err
+		}
+
+		// Note that pv is in the hex local space, but l.feet is in the world
+		// space. That's okay, because we're booting up, so haven't moved yet.
+		// I should probably fix this anyway...
+
+		//log.Infof("%s end is at: %v (home=%v, distance=%+07.2f)", leg.Name, pv, l.feet[i], pv.Distance(l.feet[i]))
+		td += pv.Distance(l.feet[i])
 	}
 
-	// TODO: Move this to a goroutine, and set ready when done.
+	return td, nil
+}
+
+func (l *Legs) waitForReady() {
 	for {
-
-		// Count the total distance between the actual foot positions and the
-		// target/home positions set above. We use this to wait indefinitely
-		// until each foot has reached its destination.
-
-		var td float64
-		for i, leg := range l.Legs {
-			pv, err := leg.PresentPosition()
-			if err != nil {
-				log.Error(err)
-				continue
-			}
-
-			// Note that pv is in the hex local space, but l.feet is in the
-			// world space. That's okay, because we're booting up, so haven't
-			// moved yet. I should probably fix this anyway...
-
-			//log.Infof("%s end is at: %v (home=%v, distance=%+07.2f)", leg.Name, pv, l.feet[i], pv.Distance(l.feet[i]))
-			td += pv.Distance(l.feet[i])
+		td, err := l.distanceFromHome()
+		if err != nil {
+			log.Error(err)
+			continue
 		}
 
 		// If the total distance is within the margin of error, reset move speed
@@ -200,25 +203,34 @@ func (l *Legs) Boot() error {
 		time.Sleep(100 * time.Millisecond)
 	}
 
+	l.ready = true
+}
+
+// TODO: Maybe provide State to boot, in case we have an initial pose? We're
+//       using the zero value now, which seems like a shaky assumption.
+func (l *Legs) Boot() error {
+
+	// Set all servos slow.
 	for _, s := range l.Servos() {
-		err := s.SetMovingSpeed(moveSpeedFast)
+
+		err := s.SetMovingSpeed(moveSpeedSlow)
 		if err != nil {
 			return fmt.Errorf("%s (while setting move speed)", err)
 		}
 
-		err = s.SetTorqueLimit(torqueLimitFast)
+		err = s.SetTorqueLimit(torqueLimitSlow)
 		if err != nil {
 			return fmt.Errorf("%s (while setting torque limit)", err)
 		}
-
-		// Enable buffered mode, so writes are batched at the end of each tick.
-		// Otherwise the each leg would be slightly ahead of the previous.
-		s.SetBuffered(true)
 	}
 
-	l.SetState(sStandUp)
-	l.ready = true
+	// Set the target for each foot to its home position. This is buffered, and
+	// will be executed once all Boot methods have been called.
+	for i, leg := range l.Legs {
+		leg.SetGoal(l.feet[i])
+	}
 
+	go l.waitForReady()
 	return nil
 }
 
@@ -243,9 +255,9 @@ func (l *Legs) SetState(s State) {
 
 // homeFootPosition returns a vector in the WORLD coordinate space for the home
 // position of the given leg.
-func (l *Legs) homeFootPosition(leg *Leg, pose math3d.Pose) math3d.Vector3 {
+func (l *Legs) homeFootPosition(offset *math3d.Vector3, leg *Leg, pose math3d.Pose) math3d.Vector3 {
 	hyp := math.Sqrt((leg.Origin.X * leg.Origin.X) + (leg.Origin.Z * leg.Origin.Z))
-	v := pose.Add(math3d.Pose{*leg.Origin, leg.Angle, 0, 0}).Add(math3d.Pose{math3d.Vector3{0, 0, stepRadius - hyp}, 0, 0, 0}).Position
+	v := pose.Add(math3d.Pose{*offset, 0, 0, 0}).Add(math3d.Pose{math3d.Vector3{0, 0, 10}, 0, 0, 0}).Add(math3d.Pose{*leg.Origin, leg.Angle, 0, 0}).Add(math3d.Pose{math3d.Vector3{0, 0, stepRadius - hyp}, 0, 0, 0}).Position
 	v.Y = 0.0
 	return v
 }
@@ -260,6 +272,20 @@ func (l *Legs) Tick(now time.Time, state *hexapod.State) error {
 	// TODO: Remove the state machine altogether? The first two are just waiting
 	//       for the pose to converge with target, which the third also does.
 	switch l.State {
+	case sDefault:
+		for _, s := range l.Servos() {
+			err := s.SetMovingSpeed(moveSpeedFast)
+			if err != nil {
+				return fmt.Errorf("%s (while setting move speed)", err)
+			}
+
+			err = s.SetTorqueLimit(torqueLimitFast)
+			if err != nil {
+				return fmt.Errorf("%s (while setting torque limit)", err)
+			}
+		}
+
+		l.SetState(sStandUp)
 
 	// After init, wait until the Y position has met the target Y position
 	// before proceeding.
@@ -303,9 +329,8 @@ func (l *Legs) Tick(now time.Time, state *hexapod.State) error {
 			// Ignore Y axis for target and pose; we take care of that below.
 			// TODO: Fix this ugly mess.
 			xzPosePos := state.Pose.Position
-			xzPosePos.Y = 0
-
 			xzTargetPos := state.Target.Position
+			xzPosePos.Y = 0
 			xzTargetPos.Y = 0
 
 			vecToGoal := xzTargetPos.Subtract(xzPosePos)
@@ -314,15 +339,10 @@ func (l *Legs) Tick(now time.Time, state *hexapod.State) error {
 			// Cap the distance we wil (attempt to) step at the max.
 			distToStep := math.Min(distToGoal, maxStepDistance)
 
-			if distToStep > minStepDistance || math.Abs(state.Target.Heading-state.Pose.Heading) > 5.0 {
-
-				// Calculate the target position for the origin.
-				vecToStep := vecToGoal.Unit().MultiplyByScalar(distToStep)
-				l.target.Position = *l.lastPose.Position.Add(vecToStep)
-				l.target.Heading = state.Target.Heading
-				log.Infof("stepping from %v to %v", l.lastPose, l.target)
-
-			} else {
+			// If the target position is closer than the minimum, or the heading
+			// is close enough, we're finished. This is the end of the idle loop
+			// when the machine is standing still.
+			if distToStep < minStepDistance && math.Abs(state.Target.Heading-state.Pose.Heading) < minTurnDistance {
 				l.target = l.lastPose
 				//log.Infof("not stepping")
 				if state.Shutdown {
@@ -333,10 +353,20 @@ func (l *Legs) Tick(now time.Time, state *hexapod.State) error {
 				break
 			}
 
+			// Generate the gait for this step cycle, in case this is the first
+			// step since boot, or the gait index has changed since last time.
+			l.makeGait(state.GaitIndex, state.Speed)
+
+			// Calculate the target position for the origin.
+			vecToStep := vecToGoal.Unit().MultiplyByScalar(distToStep)
+			l.target.Position = *l.lastPose.Position.Add(vecToStep)
+			l.target.Heading = state.Target.Heading
+			log.Infof("stepping from %v to %v", l.lastPose, l.target)
+
 			// Calculate the target position for each foot. Might be where they
 			// already are, if we're not stepping.
 			for i, leg := range l.Legs {
-				l.nextFeet[i] = l.homeFootPosition(leg, l.target)
+				l.nextFeet[i] = l.homeFootPosition(&state.Offset, leg, l.target)
 			}
 		}
 
@@ -390,6 +420,7 @@ func (l *Legs) Tick(now time.Time, state *hexapod.State) error {
 		state.Pose.Position.Y += yOffset
 	}
 
+	// Same for the x/z orientation
 	bankOffset := math.Max(-bankMoveSpeed, math.Min(bankMoveSpeed, (state.Target.Bank-state.Pose.Bank)))
 	if bankOffset != 0 {
 		state.Pose.Bank += bankOffset
@@ -403,8 +434,22 @@ func (l *Legs) Tick(now time.Time, state *hexapod.State) error {
 	// Update the goal of each leg.
 	for i, leg := range l.Legs {
 		pp := l.feet[i].MultiplyByMatrix44(state.Local())
-		leg.SetGoal(pp)
+		err := leg.SetGoal(pp)
+		if err != nil {
+			log.Warnf("%s (while setting goal position)", err)
+			continue
+		}
 	}
 
 	return nil
+}
+
+func clamp(min, max, v int) int {
+	if v < min {
+		return min
+	}
+	if v > max {
+		return max
+	}
+	return v
 }

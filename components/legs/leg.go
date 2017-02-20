@@ -128,6 +128,9 @@ func (leg *Leg) PresentPosition() (math3d.Vector3, error) {
 		return v, fmt.Errorf("%s (while getting %s tarsus (#%d) position)", err, leg.Name, leg.Tarsus.ID)
 	}
 
+	// Remove the extra angle added by SetGoal.
+	tarPos -= tarsusExtraAngle
+
 	root := leg.rootSegment()
 	coxa := MakeSegment("coxa", root, *math3d.MakeSingularEulerAngle(math3d.RotationHeading, coxPos), *math3d.MakeVector3(0, coxaOffsetY, coxaOffsetZ))
 	femur := MakeSegment("femur", coxa, *math3d.MakeSingularEulerAngle(math3d.RotationPitch, femPos), *math3d.MakeVector3(0, 0, femurLength))
@@ -139,7 +142,7 @@ func (leg *Leg) PresentPosition() (math3d.Vector3, error) {
 
 // SetGoal sets the goal position of the leg to the given vector in the chassis
 // coordinate space.
-func (leg *Leg) SetGoal(vt math3d.Vector3) {
+func (leg *Leg) SetGoal(vt math3d.Vector3) error {
 
 	// Solve the angle of the coxa by looking at the position of the target from
 	// above (x,z). Note that "above" here is in the chassis space, which might
@@ -249,10 +252,25 @@ func (leg *Leg) SetGoal(vt math3d.Vector3) {
 	}
 
 	// Move the servos!
-	leg.Coxa.MoveTo(coxPos)
-	leg.Femur.MoveTo(femPos)
-	leg.Tibia.MoveTo(tibPos)
-	leg.Tarsus.MoveTo(tarPos)
+	err1 := servos.RegMoveTo(leg.Coxa, coxPos)
+	err2 := servos.RegMoveTo(leg.Femur, femPos)
+	err3 := servos.RegMoveTo(leg.Tibia, tibPos)
+	err4 := servos.RegMoveTo(leg.Tarsus, tarPos+tarsusExtraAngle)
+
+	if err1 != nil {
+		return err1
+	}
+	if err2 != nil {
+		return err2
+	}
+	if err3 != nil {
+		return err3
+	}
+	if err4 != nil {
+		return err4
+	}
+
+	return nil
 }
 
 // sss returns the angle α, given the length of sides a, b, and c.
