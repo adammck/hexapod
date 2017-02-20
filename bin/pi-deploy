@@ -1,10 +1,11 @@
-#!/bin/bash -ex
+#!/bin/bash -eux
 cd $(cd `dirname "$0"`; cd ..; pwd)
 
-USER=root
+USER=pi
 HOST="hexapod.local"
 TMP=/tmp/bot
-DEST=/root/bot
+DEST=/home/pi/bot
+BACKUP=/home/pi/bot.backup
 
 if [ $# != "1" ]; then
   echo "Usage: $0 PACKAGE"
@@ -16,13 +17,17 @@ shift
 
 echo
 echo "# building"
-GOARCH=arm GOOS=linux go build -o $TMP $PKG || exit 1
+GOARCH=arm GOOS=linux go build -o $TMP $PKG
+
+echo
+echo "# backing up"
+ssh -t $USER@$HOST "[ -f $DEST ] && sudo mv $DEST $BACKUP" || true
 
 echo
 echo "# deploying"
-rsync -p $TMP $USER@$HOST:$DEST || exit 1
+scp $TMP $USER@$HOST:$DEST
 rm $TMP
 
 echo
 echo "# restarting"
-ssh -t $USER@$HOST "systemctl restart bot" || exit 1
+ssh -t $USER@$HOST "sudo systemctl restart bot"
