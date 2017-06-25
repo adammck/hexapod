@@ -2,11 +2,11 @@
 
 This is the Go program which powers my hexapod. It runs on a Raspberry Pi B+, and is controlled by a Sony Sixaxis (PS3) controller. The hexapod itself is 50cm in diameter, and about 2kg. The chassis was 3d-printed with a Printrbot Simple Metal, and bolted to 24 Dynamixel AX-12A servos. Each leg has 4DOF, which makes the gait quite flexible.
 
-Here's it is, as of January 2015:
+Here's it is, as of June 2017:
 
-![hexapod photo](http://i.imgur.com/h3j1Ojn.jpg)
+![hexapod photo](http://i.imgur.com/9xvMpsR.jpg)
 
-And here's a GIF of it in action:
+And here's an old GIF of it in action:
 
 ![hexapod standing up](https://i.imgur.com/YVEN3If.gif)
 
