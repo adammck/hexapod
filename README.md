@@ -31,6 +31,8 @@ And [here's a video](https://vimeo.com/115932070).
 * [JW Winco 353-20-24-M6-S-55](https://store.solutionsdirectonline.com/jw-winco-353-20-24-m6-s-55-vibration-isolation-mount-p9026.aspx) rubber feet
 * [Microsoft LifeCam Cinema 720p](http://a.co/3BNVShU) camera
 
+STL files are available at [adammck/hexapod-parts](https://github.com/adammck/hexapod-parts), but should not be considered usable for any purpose. It's more fun to design your own, anyway. Email me if you want the SketchUp files.
+
 ## Usage
 
 1. Spend countless hours and dollars printing and assembling the hexapod. Be
